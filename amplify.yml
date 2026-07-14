@@ -9,6 +9,10 @@ frontend:
     build:
       commands:
         - AMPLIFY=1 npm run build
+        # TanStack Start SPA mode emits the prerendered shell as _shell.html with
+        # server-pass asset hashes. Publish it as index.html and repoint any stale
+        # asset refs to the files actually present in dist/client/assets.
+        - node scripts/fix-amplify-shell.mjs
   artifacts:
     baseDirectory: dist/client
     files:

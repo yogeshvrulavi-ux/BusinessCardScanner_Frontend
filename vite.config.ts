@@ -54,7 +54,9 @@ export default defineConfig({
   plugins: [
     tsConfigPaths(),
     tailwindcss(),
-    tanstackStart(),
+    // Amplify has no SSR runtime here — build a prerendered SPA shell (dist/client/index.html)
+    // so the static deploy can boot. Netlify keeps full SSR via its adapter below.
+    tanstackStart(isAmplifyBuild ? { spa: { enabled: true } } : undefined),
     ...(enableNetlifyPlugin ? [netlify()] : []),
     react(),
   ],
