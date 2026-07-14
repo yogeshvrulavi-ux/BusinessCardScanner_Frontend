@@ -1,0 +1,430 @@
+/** Laplacian variance sharpness score for a video frame region (higher = sharper). */
+export function measureFrameSharpness(
+  video: HTMLVideoElement,
+  region: { x: number; y: number; w: number; h: number },
+): number {
+  if (video.videoWidth === 0 || video.videoHeight === 0) return 0;
+
+  const sampleW = 120;
+  const sampleH = 75;
+  const canvas = document.createElement("canvas");
+  canvas.width = sampleW;
+  canvas.height = sampleH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return 0;
+
+  const sx = region.x * video.videoWidth;
+  const sy = region.y * video.videoHeight;
+  const sw = region.w * video.videoWidth;
+  const sh = region.h * video.videoHeight;
+
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
+  const { data } = ctx.getImageData(0, 0, sampleW, sampleH);
+
+  const gray = new Float32Array(sampleW * sampleH);
+  for (let i = 0; i < gray.length; i++) {
+    const o = i * 4;
+    gray[i] = 0.299 * data[o] + 0.587 * data[o + 1] + 0.114 * data[o + 2];
+  }
+
+  let sum = 0;
+  let sumSq = 0;
+  let count = 0;
+  for (let y = 1; y < sampleH - 1; y++) {
+    for (let x = 1; x < sampleW - 1; x++) {
+      const idx = y * sampleW + x;
+      const lap =
+        -4 * gray[idx] +
+        gray[idx - 1] +
+        gray[idx + 1] +
+        gray[idx - sampleW] +
+        gray[idx + sampleW];
+      sum += lap;
+      sumSq += lap * lap;
+      count++;
+    }
+  }
+
+  if (count === 0) return 0;
+  const mean = sum / count;
+  return sumSq / count - mean * mean;
+}
+
+/** Otsu threshold for binarizing card text (improves Tesseract on glossy cards). */
+function otsuThreshold(histogram: Uint32Array, totalPixels: number): number {
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * histogram[i];
+
+  let sumB = 0;
+  let weightB = 0;
+  let maxVariance = 0;
+  let threshold = 128;
+
+  for (let t = 0; t < 256; t++) {
+    weightB += histogram[t];
+    if (weightB === 0) continue;
+    const weightF = totalPixels - weightB;
+    if (weightF === 0) break;
+
+    sumB += t * histogram[t];
+    const meanB = sumB / weightB;
+    const meanF = (sum - sumB) / weightF;
+    const variance = weightB * weightF * (meanB - meanF) ** 2;
+    if (variance > maxVariance) {
+      maxVariance = variance;
+      threshold = t;
+    }
+  }
+  return threshold;
+}
+
+/** Apply OCR preprocessing: grayscale → contrast → Otsu binarization → light sharpen. */
+export function preprocessForOCR(canvas: HTMLCanvasElement): ImageData {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return ctx!.createImageData(canvas.width, canvas.height);
+
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  const pixelCount = width * height;
+  const gray = new Uint8Array(pixelCount);
+  const histogram = new Uint32Array(256);
+
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const value = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+    gray[p] = value;
+    histogram[value]++;
+  }
+
+  const threshold = otsuThreshold(histogram, pixelCount);
+
+  for (let p = 0; p < pixelCount; p++) {
+    const enhanced = Math.min(255, Math.max(0, (gray[p] - 128) * 1.45 + 128));
+    const binary = enhanced > threshold ? 255 : 0;
+    const o = p * 4;
+    data[o] = binary;
+    data[o + 1] = binary;
+    data[o + 2] = binary;
+  }
+
+  // Unsharp mask on binarized image — crispens letter edges for Tesseract.
+  const copy = new Uint8ClampedArray(data);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const idx = (y * width + x) * 4;
+      const center = copy[idx];
+      const neighbors =
+        (copy[idx - 4] +
+          copy[idx + 4] +
+          copy[idx - width * 4] +
+          copy[idx + width * 4]) /
+        4;
+      const sharpened = Math.min(255, Math.max(0, center + (center - neighbors) * 0.35));
+      data[idx] = sharpened;
+      data[idx + 1] = sharpened;
+      data[idx + 2] = sharpened;
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return imageData;
+}
+
+/** ISO 7810 ID-1 business card aspect (85.6 × 53.98 mm). */
+export const CARD_ASPECT = 1.586;
+
+/** Legacy normalized region — prefer `getCenteredCardCropRegion` for capture/analysis. */
+export const CARD_FRAME = { x: 0.06, y: 0.34, w: 0.88, h: 0.31 };
+
+export const ALIGN_MIN_SHARPNESS = 35;
+export const AUTO_CAPTURE_SHARPNESS = 95;
+export const AUTO_CAPTURE_STABLE_READINGS = 8;
+/** Hold steady this long after all checks pass before auto-shutter (ms). */
+export const AUTO_CAPTURE_HOLD_MS = 1400;
+/** Ignore auto-capture until the camera has warmed up (ms). */
+export const AUTO_CAPTURE_WARMUP_MS = 2500;
+/** Min card-likeness score (0–100) before auto-capture is allowed. */
+export const CARD_DETECT_MIN_SCORE = 60;
+/** Min inner-region luminance variance — rejects blank/dark blur false positives. */
+export const CARD_MIN_INNER_VARIANCE = 180;
+
+export type NormalizedRegion = { x: number; y: number; w: number; h: number };
+
+/**
+ * Map the on-screen centered card guide to source-video coordinates (object-cover).
+ * Returns normalized 0–1 crop rect matching the UI frame.
+ */
+export function getCenteredCardCropRegion(
+  video: HTMLVideoElement,
+  maxGuideWidthPx = 440,
+): NormalizedRegion {
+  const { videoWidth, videoHeight } = video;
+  const displayW = video.clientWidth || videoWidth;
+  const displayH = video.clientHeight || videoHeight;
+
+  if (!videoWidth || !videoHeight || !displayW || !displayH) {
+    return CARD_FRAME;
+  }
+
+  const scale = Math.max(displayW / videoWidth, displayH / videoHeight);
+  const renderedW = videoWidth * scale;
+  const renderedH = videoHeight * scale;
+  const offsetX = (displayW - renderedW) / 2;
+  const offsetY = (displayH - renderedH) / 2;
+
+  const guideW = Math.min(displayW * 0.88, maxGuideWidthPx);
+  const guideH = guideW / CARD_ASPECT;
+  const guideX = (displayW - guideW) / 2;
+  const guideY = (displayH - guideH) / 2;
+
+  let sx = (guideX - offsetX) / scale;
+  let sy = (guideY - offsetY) / scale;
+  let sw = guideW / scale;
+  let sh = guideH / scale;
+
+  sx = Math.max(0, sx);
+  sy = Math.max(0, sy);
+  sw = Math.min(sw, videoWidth - sx);
+  sh = Math.min(sh, videoHeight - sy);
+
+  return {
+    x: sx / videoWidth,
+    y: sy / videoHeight,
+    w: sw / videoWidth,
+    h: sh / videoHeight,
+  };
+}
+
+/** Card presence: edge density + inner/outer contrast (0–100). */
+export function measureCardPresence(
+  video: HTMLVideoElement,
+  region: NormalizedRegion,
+): number {
+  if (video.videoWidth === 0 || video.videoHeight === 0) return 0;
+
+  const sampleW = 96;
+  const sampleH = Math.max(48, Math.round(sampleW / CARD_ASPECT));
+  const canvas = document.createElement("canvas");
+  canvas.width = sampleW;
+  canvas.height = sampleH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return 0;
+
+  const sx = region.x * video.videoWidth;
+  const sy = region.y * video.videoHeight;
+  const sw = region.w * video.videoWidth;
+  const sh = region.h * video.videoHeight;
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
+
+  const { data } = ctx.getImageData(0, 0, sampleW, sampleH);
+  const gray = new Float32Array(sampleW * sampleH);
+  for (let i = 0; i < gray.length; i++) {
+    const o = i * 4;
+    gray[i] = 0.299 * data[o] + 0.587 * data[o + 1] + 0.114 * data[o + 2];
+  }
+
+  let edgeSum = 0;
+  let edgeCount = 0;
+  for (let y = 1; y < sampleH - 1; y++) {
+    for (let x = 1; x < sampleW - 1; x++) {
+      const idx = y * sampleW + x;
+      const gx = Math.abs(gray[idx + 1] - gray[idx - 1]);
+      const gy = Math.abs(gray[idx + sampleW] - gray[idx - sampleW]);
+      edgeSum += gx + gy;
+      edgeCount++;
+    }
+  }
+  const edgeDensity = edgeCount ? edgeSum / edgeCount : 0;
+
+  const margin = Math.max(2, Math.floor(Math.min(sampleW, sampleH) * 0.12));
+  let innerSum = 0;
+  let innerCount = 0;
+  let outerSum = 0;
+  let outerCount = 0;
+
+  for (let y = 0; y < sampleH; y++) {
+    for (let x = 0; x < sampleW; x++) {
+      const onBorder =
+        x < margin || y < margin || x >= sampleW - margin || y >= sampleH - margin;
+      const v = gray[y * sampleW + x];
+      if (onBorder) {
+        outerSum += v;
+        outerCount++;
+      } else {
+        innerSum += v;
+        innerCount++;
+      }
+    }
+  }
+
+  const innerMean = innerCount ? innerSum / innerCount : 0;
+  const outerMean = outerCount ? outerSum / outerCount : 0;
+  const contrast = Math.abs(innerMean - outerMean);
+
+  let innerVarSum = 0;
+  for (let y = margin; y < sampleH - margin; y++) {
+    for (let x = margin; x < sampleW - margin; x++) {
+      const v = gray[y * sampleW + x];
+      const delta = v - innerMean;
+      innerVarSum += delta * delta;
+    }
+  }
+  const innerVariance = innerCount ? innerVarSum / innerCount : 0;
+
+  // Dark blur / lens cap — high edge noise but no printable card content
+  if (innerMean < 48 || innerVariance < CARD_MIN_INNER_VARIANCE * 0.45) {
+    return 0;
+  }
+
+  const edgeScore = Math.min(40, (edgeDensity / 22) * 40);
+  const contrastScore = Math.min(35, (contrast / 32) * 35);
+  const textureScore = Math.min(25, (innerVariance / CARD_MIN_INNER_VARIANCE) * 25);
+  return Math.round(edgeScore + contrastScore + textureScore);
+}
+
+export type AlignmentStatus = "searching" | "aligning" | "hold-steady" | "ready";
+
+export function getAlignmentStatus(
+  sharpness: number,
+  stableCount: number,
+  cardScore: number,
+): AlignmentStatus {
+  if (stableCount >= AUTO_CAPTURE_STABLE_READINGS && cardScore >= CARD_DETECT_MIN_SCORE) {
+    return "ready";
+  }
+  if (stableCount >= Math.max(2, AUTO_CAPTURE_STABLE_READINGS - 1)) return "hold-steady";
+  if (sharpness >= ALIGN_MIN_SHARPNESS && cardScore >= CARD_DETECT_MIN_SCORE * 0.65) {
+    return "aligning";
+  }
+  return "searching";
+}
+
+export function getAlignmentProgress(
+  sharpness: number,
+  stableCount: number,
+  cardScore: number,
+): number {
+  const sharpPct = Math.min(45, (sharpness / AUTO_CAPTURE_SHARPNESS) * 45);
+  const cardPct = Math.min(35, (cardScore / CARD_DETECT_MIN_SCORE) * 35);
+  const stablePct = Math.min(20, (stableCount / AUTO_CAPTURE_STABLE_READINGS) * 20);
+  return Math.round(sharpPct + cardPct + stablePct);
+}
+
+export function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
+}
+
+export function isIOSDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+export function pickDefaultFacingMode(): "environment" | "user" {
+  // Laptops/desktops only have a front webcam — "environment" fails on Windows
+  return isMobileDevice() ? "environment" : "user";
+}
+
+/** MediaTrackConstraints for react-webcam — tier 2 = strictest (best for iPhone rear cam). */
+export function buildWebcamVideoConstraints(
+  facingMode: "environment" | "user",
+  tier: 0 | 1 | 2,
+): MediaTrackConstraints | boolean {
+  if (tier === 0) {
+    return isMobileDevice() ? { facingMode: { ideal: facingMode } } : true;
+  }
+  if (tier === 1) {
+    return { facingMode: { ideal: facingMode } };
+  }
+  // tier 2 — exact facingMode; iOS Safari often ignores "ideal" and opens the selfie cam
+  return { facingMode: { exact: facingMode } };
+}
+
+export function initialWebcamConstraintTier(): 0 | 1 | 2 {
+  return isMobileDevice() ? 2 : 0;
+}
+
+async function enumerateVideoInputs(): Promise<MediaDeviceInfo[]> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((d) => d.kind === "videoinput" && d.deviceId);
+  } catch {
+    return [];
+  }
+}
+
+export async function requestCameraStream(
+  preferredFacing?: "environment" | "user",
+): Promise<MediaStream> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Camera is not supported in this browser.");
+  }
+
+  if (!window.isSecureContext) {
+    throw new Error("Camera requires HTTPS or localhost. Open the app at http://localhost:5173");
+  }
+
+  const facing = preferredFacing ?? pickDefaultFacingMode();
+  const mobile = isMobileDevice();
+  const attempts: MediaStreamConstraints[] = [];
+
+  if (mobile) {
+    // Mobile: rear camera first — { video: true } often opens the selfie cam
+    attempts.push({ video: { facingMode: facing }, audio: false });
+    attempts.push({ video: { facingMode: { ideal: facing } }, audio: false });
+  } else {
+    // Desktop: unconstrained first — works on most Windows laptops
+    attempts.push({ video: true, audio: false });
+  }
+
+  // Try each physical camera by deviceId (after permission, labels may be available)
+  const videoInputs = await enumerateVideoInputs();
+  for (const device of videoInputs) {
+    attempts.push({ video: { deviceId: { exact: device.deviceId } }, audio: false });
+    attempts.push({ video: { deviceId: { ideal: device.deviceId } }, audio: false });
+  }
+
+  if (!mobile) {
+    attempts.push({ video: { facingMode: { ideal: facing } }, audio: false });
+    attempts.push({ video: { facingMode: facing }, audio: false });
+  }
+
+  if (mobile) {
+    attempts.push({ video: true, audio: false });
+  }
+
+  let lastError: unknown;
+  const seen = new Set<string>();
+
+  for (const constraints of attempts) {
+    const key = JSON.stringify(constraints);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("✓ Camera stream acquired with constraints:", constraints);
+      return stream;
+    } catch (err) {
+      lastError = err;
+      console.warn("✗ Camera attempt failed:", constraints, err);
+    }
+  }
+
+  const name = lastError instanceof DOMException ? lastError.name : "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    throw new Error(
+      "Camera blocked. Click the camera icon in your browser address bar → Allow, then tap Try again.",
+    );
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    throw new Error("No camera found. Use Choose from folder to upload a card photo.");
+  }
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    throw new Error("Camera is busy (Zoom/Teams may be using it). Close other apps and try again.");
+  }
+  if (name === "OverconstrainedError") {
+    throw new Error("Camera settings not supported. Tap Try again — we will use a simpler mode.");
+  }
+  throw new Error("Could not open camera. Use Choose from folder or tap Try again.");
+}

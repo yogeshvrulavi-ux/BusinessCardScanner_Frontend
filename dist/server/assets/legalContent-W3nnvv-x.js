@@ -1,0 +1,34 @@
+const LEGAL_PAGE_URLS = {
+  privacy: "/privacy-policy.html",
+  terms: "/terms-and-conditions.html"
+};
+const LEGAL_CONTACT_EMAIL = "supportulavi@gmail.com";
+const LEGAL_CONTACT_PHONE = "+91 8838747273";
+const COOKIE_POLICY_SECTIONS = [
+  {
+    heading: "What are cookies?",
+    body: "Cookies and similar technologies are small files stored in your browser. CardSync uses them to remember layout preferences and optional analytics choices."
+  },
+  {
+    heading: "Essential cookies",
+    body: "Required for the app to function. Includes sidebar open/collapsed state (sidebar_state) so navigation stays consistent between visits. These cannot be disabled while using the app."
+  },
+  {
+    heading: "Preference storage",
+    body: "We store your profile, notification toggles, and consent choices in local storage (cs-user-settings, cs-cookie-consent). This is not shared with third parties in this build."
+  },
+  {
+    heading: "Optional analytics",
+    body: "If enabled in Preferences, anonymous usage events may be stored locally to improve the product. No advertising cookies are used."
+  },
+  {
+    heading: "Managing cookies",
+    body: "Use the cookie icon at the bottom-right or open Preferences → Legal & cookies to update choices. Clearing browser data removes all stored cookies and local app data."
+  }
+];
+export {
+  COOKIE_POLICY_SECTIONS as C,
+  LEGAL_PAGE_URLS as L,
+  LEGAL_CONTACT_EMAIL as a,
+  LEGAL_CONTACT_PHONE as b
+};
