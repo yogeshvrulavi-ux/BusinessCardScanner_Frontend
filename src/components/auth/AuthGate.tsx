@@ -2,10 +2,9 @@ import { useEffect } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 
-import { authClient } from "@/auth";
-import { syncProfileFromAuthUser } from "@/lib/authProfileSync";
+import { useAuth, type UserRole } from "@/lib/AuthContext";
 
-function resolvePostAuthPath(): string {
+function resolvePostAuthPath(role?: UserRole): string {
   if (typeof window === "undefined") return "/scan";
   const redirectTo = new URLSearchParams(window.location.search).get("redirectTo");
   if (redirectTo?.startsWith("/") && !redirectTo.startsWith("/auth")) {
@@ -14,21 +13,22 @@ function resolvePostAuthPath(): string {
   return "/scan";
 }
 
-/** Blocks protected routes until Neon Auth session is resolved — prevents scan/login flicker. */
-export function AuthGate({ children }: { children: React.ReactNode }) {
+type AuthGateProps = {
+  children: React.ReactNode;
+  /** Optional: restrict access to specific roles. */
+  allowedRoles?: UserRole[];
+};
+
+/** Blocks protected routes until auth is resolved; redirects unauthorized users. */
+export function AuthGate({ children, allowedRoles }: AuthGateProps) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const searchStr = useRouterState({ select: (state) => state.location.searchStr });
-  const { data: session, isPending } = authClient.useSession();
+  const { user, isAuthenticated, isLoading } = useAuth();
 
+  // Redirect to login if not authenticated
   useEffect(() => {
-    if (session?.user) {
-      syncProfileFromAuthUser(session.user);
-    }
-  }, [session?.user?.email, session?.user?.name]);
-
-  useEffect(() => {
-    if (isPending || session?.user) return;
+    if (isLoading || isAuthenticated) return;
 
     const redirectTo = `${pathname}${searchStr}`;
     navigate({
@@ -37,9 +37,17 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       search: { redirectTo },
       replace: true,
     });
-  }, [isPending, session?.user, pathname, searchStr, navigate]);
+  }, [isLoading, isAuthenticated, pathname, searchStr, navigate]);
 
-  if (isPending) {
+  // Redirect to access-denied if role not permitted
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !allowedRoles || !user) return;
+    if (!allowedRoles.includes(user.role)) {
+      navigate({ to: "/auth/$pathname", params: { pathname: "access-denied" }, replace: true });
+    }
+  }, [isLoading, isAuthenticated, allowedRoles, user, navigate]);
+
+  if (isLoading) {
     return (
       <div className="flex min-h-svh items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" aria-label="Loading session" />
@@ -47,7 +55,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!session?.user) {
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  // Check role before rendering
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
     return null;
   }
 

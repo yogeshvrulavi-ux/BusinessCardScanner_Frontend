@@ -8,14 +8,16 @@ const LEGACY_PLACEHOLDER_EMAILS = new Set([
 
 const LEGACY_PLACEHOLDER_NAMES = new Set(["Yogesh VR", "Yogesh Vanaparti", "Alex Kim"]);
 
-/** Persist Neon Auth name/email/phone into local profile so Settings reflects the signed-up account. */
+/** Persist backend auth user info into local settings so the UI reflects the logged-in account. */
 export function syncProfileFromAuthUser(user: {
-  name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   email?: string | null;
   phone?: string | null;
+  name?: string | null;
 }): void {
   const email = user.email?.trim();
-  const name = user.name?.trim();
+  const name = user.name?.trim() || `${user.first_name || ""} ${user.last_name || ""}`.trim();
   const phone = user.phone?.trim();
   if (!email && !name && !phone) return;
 

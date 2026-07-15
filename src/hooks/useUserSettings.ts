@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { authClient } from "@/auth";
 import {
   DEFAULT_USER_SETTINGS,
   getUserFirstName,
@@ -10,7 +9,6 @@ import {
 
 export function useUserSettings() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
-  const { data: authSession } = authClient.useSession();
 
   useEffect(() => {
     setSettings(loadUserSettings());
@@ -26,8 +24,18 @@ export function useUserSettings() {
     };
   }, []);
 
-  const authEmail = authSession?.user?.email?.trim();
-  const authName = authSession?.user?.name?.trim();
+  // Merge auth user info from localStorage if available
+  let authEmail = "";
+  let authName = "";
+  try {
+    const stored = localStorage.getItem("cs_auth_user");
+    if (stored) {
+      const authUser = JSON.parse(stored);
+      authEmail = authUser.email?.trim() || "";
+      authName = `${authUser.first_name || ""} ${authUser.last_name || ""}`.trim();
+    }
+  } catch { /* storage unavailable */ }
+
   const merged = {
     ...settings,
     ...(authEmail ? { email: authEmail } : {}),

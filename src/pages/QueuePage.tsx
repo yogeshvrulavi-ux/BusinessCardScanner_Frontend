@@ -35,8 +35,8 @@ import {
 } from "@/lib/indexeddb";
 import {
   listContacts,
-  syncAllQueueItemsToZoho,
-  syncQueueItemToZoho,
+  syncAllQueueItems,
+  syncQueueItem,
   type StoredContact,
 } from "@/lib/contactStorage";
 import { toast } from "sonner";
@@ -110,7 +110,7 @@ export function QueuePage() {
     });
 
     try {
-      await syncQueueItemToZoho(item);
+      await syncQueueItem(item);
       return true;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Save failed";
@@ -140,7 +140,7 @@ export function QueuePage() {
     setIsSavingAll(true);
     toast.info(`Saving ${unsynced.length} contact(s) on this device...`);
     try {
-      const { synced, total } = await syncAllQueueItemsToZoho();
+      const { synced, total } = await syncAllQueueItems();
       if (synced > 0) {
         toast.success(`Saved ${synced} of ${total} to this device.`);
       } else {

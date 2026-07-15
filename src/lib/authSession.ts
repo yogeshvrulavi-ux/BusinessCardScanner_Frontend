@@ -1,53 +1,45 @@
-import { authClient } from "@/auth";
-import { isAuthEnabled } from "@/lib/authConfig";
+/**
+ * Auth session bridge — provides token access outside React components.
+ * The AuthProvider updates these module-level refs so apiFetch can use them.
+ */
 
-let cachedToken: string | null = null;
-let cachedExpiresAt = 0;
+let _getAccessToken: (() => string | null) | null = null;
+let _refreshAccessToken: (() => Promise<string | null>) | null = null;
+let _onAuthExpired: (() => void) | null = null;
 
-/** Session bearer token used for Render API calls (auto-refreshed by Neon Auth). */
-export async function getAuthBearerToken(forceRefresh = false): Promise<string | null> {
-  if (!isAuthEnabled) return null;
-
-  const now = Date.now();
-  if (!forceRefresh && cachedToken && cachedExpiresAt > now + 60_000) {
-    return cachedToken;
-  }
-
-  try {
-    // Neon recommends authClient.token() for external API Authorization headers.
-    const tokenResult = await authClient.token(
-      forceRefresh
-        ? { fetchOptions: { headers: { "X-Force-Fetch": "true" } } }
-        : undefined,
-    );
-    const jwt = tokenResult.data?.token;
-    if (jwt) {
-      cachedToken = jwt;
-      cachedExpiresAt = now + 14 * 60_000;
-      return jwt;
-    }
-
-    const sessionResult = await authClient.getSession({
-      query: { disableRefresh: false },
-    });
-    const sessionToken = sessionResult.data?.session?.token;
-    const expiresAt = sessionResult.data?.session?.expiresAt;
-
-    if (sessionToken) {
-      cachedToken = sessionToken;
-      cachedExpiresAt = expiresAt ? new Date(expiresAt).getTime() : now + 3_600_000;
-      return sessionToken;
-    }
-  } catch {
-    /* session unavailable */
-  }
-
-  cachedToken = null;
-  cachedExpiresAt = 0;
-  return null;
+/** Register the token accessors from AuthProvider (called once on mount). */
+export function registerAuthSessionBridge(accessors: {
+  getAccessToken: () => string | null;
+  refreshAccessToken: () => Promise<string | null>;
+  onAuthExpired: () => void;
+}): void {
+  _getAccessToken = accessors.getAccessToken;
+  _refreshAccessToken = accessors.refreshAccessToken;
+  _onAuthExpired = accessors.onAuthExpired;
 }
 
+/** Get the current bearer token for API requests. */
+export async function getAuthBearerToken(forceRefresh = false): Promise<string | null> {
+  if (!_getAccessToken) return null;
+
+  if (!forceRefresh) {
+    return _getAccessToken();
+  }
+
+  // Force refresh — use the refresh flow
+  if (_refreshAccessToken) {
+    return _refreshAccessToken();
+  }
+
+  return _getAccessToken();
+}
+
+/** Clear cached token (compat — now handled by AuthContext). */
 export function clearAuthTokenCache(): void {
-  cachedToken = null;
-  cachedExpiresAt = 0;
+  // No-op — token cache is managed by AuthContext
+}
+
+/** Notify that auth has expired (triggers logout in AuthContext). */
+export function notifyAuthExpired(): void {
+  if (_onAuthExpired) _onAuthExpired();
 }

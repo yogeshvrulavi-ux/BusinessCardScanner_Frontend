@@ -1,12 +1,12 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { InsightsPage } from "@/pages/InsightsPage";
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({
     meta: [
-      { title: "Analytics · CardSync AI" },
-      { name: "description", content: "(Removed) Redirecting to Queue Center." },
+      { title: "Insights · CardSync AI" },
+      { name: "description", content: "Contact capture analytics and team performance." },
     ],
   }),
-  component: () => redirect({ to: "/queue" }),
+  component: InsightsPage,
 });
-

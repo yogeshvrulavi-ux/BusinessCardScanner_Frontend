@@ -1,6 +1,5 @@
-import { authClient } from "@/auth";
-import { isAuthEnabled } from "@/lib/authConfig";
 import { loadUserSettings } from "@/lib/settingsStorage";
+import { getAuthApiBase } from "@/lib/authConfig";
 
 export type AppUserIdentity = {
   id: string;
@@ -19,7 +18,7 @@ export function getCurrentAppUserSync(): AppUserIdentity | null {
   return { id: "", email, phone, fullName };
 }
 
-/** Identity for offline scoping and profile — prefers Neon session when available. */
+/** Identity for offline scoping and profile — uses stored auth user when available. */
 export async function getCurrentAppUser(): Promise<AppUserIdentity | null> {
   const settings = loadUserSettings();
   let id = "";
@@ -27,19 +26,16 @@ export async function getCurrentAppUser(): Promise<AppUserIdentity | null> {
   let phone = settings.phone?.trim() || "";
   let fullName = settings.fullName?.trim() || "";
 
-  if (isAuthEnabled) {
-    try {
-      const session = await authClient.getSession();
-      const user = session.data?.user;
-      if (user) {
-        id = String(user.id || "").trim();
-        email = user.email?.trim().toLowerCase() || email;
-        fullName = user.name?.trim() || fullName;
-      }
-    } catch {
-      /* session unavailable */
+  // Try to read auth user from localStorage (set by AuthContext)
+  try {
+    const stored = localStorage.getItem("cs_auth_user");
+    if (stored) {
+      const authUser = JSON.parse(stored);
+      id = String(authUser.id || "").trim();
+      email = authUser.email?.trim().toLowerCase() || email;
+      fullName = `${authUser.first_name || ""} ${authUser.last_name || ""}`.trim() || fullName;
     }
-  }
+  } catch { /* storage unavailable */ }
 
   if (!id && !email && !phone) return null;
   return { id, email, phone, fullName };
@@ -90,7 +86,7 @@ export function contactBelongsToAppUser(
   },
   user: AppUserIdentity | null,
 ): boolean {
-  if (!isAuthEnabled || !user) return true;
+  if (!user) return true;
 
   const data = record.contact_data ?? record;
   const capturedEmail = String(data.capturedByEmail || "").trim().toLowerCase();

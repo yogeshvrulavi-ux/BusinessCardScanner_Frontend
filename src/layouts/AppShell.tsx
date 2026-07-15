@@ -12,7 +12,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { NetworkOfflineBanner } from "@/components/layout/NetworkOfflineBanner";
 import { ConfirmModalProvider } from "@/components/ui/confirm-modal";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
-import { countPendingZohoSync, maybeAutoSyncToZohoWhenOnline } from "@/lib/autoZohoSync";
+import { countPendingSync, maybeAutoSyncWhenOnline } from "@/lib/autoZohoSync";
 import { loadUserSettings } from "@/lib/settingsStorage";
 import { useForceLightMode } from "@/hooks/useForceLightMode";
 export function AppShell() {
@@ -45,29 +45,29 @@ export function AppShell() {
       }
     }
 
-    const processAutoZohoSync = async () => {
+    const processAutoSync = async () => {
       if (!navigator.onLine) return;
 
       const prefs = loadUserSettings();
       if (!prefs.autoSyncToZohoWhenOnline) return;
 
       try {
-        const pending = await countPendingZohoSync();
-        const totalPending = pending.queue + pending.contacts;
+        const pending = await countPendingSync();
+        const totalPending = pending.queue;
         if (totalPending === 0) return;
 
         const showToast = prefs.notificationsEnabled && prefs.queueNotificationsEnabled;
         if (showToast) {
-          toast.info(`Syncing ${totalPending} contact(s) to Zoho CRM…`);
+          toast.info(`Syncing ${totalPending} contact(s) to database…`);
         }
 
-        const summary = await maybeAutoSyncToZohoWhenOnline();
+        const summary = await maybeAutoSyncWhenOnline();
         if (!summary.ran) return;
 
-        const synced = summary.queueSynced + summary.contactsSynced;
-        const total = summary.queueTotal + summary.contactsTotal;
+        const synced = summary.queueSynced;
+        const total = summary.queueTotal;
         if (synced > 0 && showToast) {
-          toast.success(`Synced ${synced} of ${total} contact(s) to Zoho CRM.`);
+          toast.success(`Synced ${synced} of ${total} contact(s) to database.`);
         }
 
         window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
@@ -79,7 +79,7 @@ export function AppShell() {
 
     const handleOnline = () => {
       syncConnectionModeWithNetwork();
-      void processAutoZohoSync();
+      void processAutoSync();
     };
     const handleOffline = () => {
       syncConnectionModeWithNetwork();
@@ -88,13 +88,13 @@ export function AppShell() {
     if (!navigator.onLine) {
       syncConnectionModeWithNetwork();
     } else {
-      void processAutoZohoSync();
+      void processAutoSync();
     }
 
     const handleConnectionModeChange = (e: Event) => {
       const mode = (e as CustomEvent<"online" | "offline">).detail;
       if (mode === "online" && navigator.onLine) {
-        void processAutoZohoSync();
+        void processAutoSync();
       }
     };
 

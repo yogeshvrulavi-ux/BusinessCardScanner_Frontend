@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UsersRouteImport } from './routes/users'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ScanRouteImport } from './routes/scan'
@@ -16,10 +17,16 @@ import { Route as ReviewRouteImport } from './routes/review'
 import { Route as QueueRouteImport } from './routes/queue'
 import { Route as EventsRouteImport } from './routes/events'
 import { Route as ContactsRouteImport } from './routes/contacts'
+import { Route as CompaniesRouteImport } from './routes/companies'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
 
+const UsersRoute = UsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StatusRoute = StatusRouteImport.update({
   id: '/status',
   path: '/status',
@@ -55,6 +62,11 @@ const ContactsRoute = ContactsRouteImport.update({
   path: '/contacts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CompaniesRoute = CompaniesRouteImport.update({
+  id: '/companies',
+  path: '/companies',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -74,6 +86,7 @@ const AuthPathnameRoute = AuthPathnameRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
   '/events': typeof EventsRoute
   '/queue': typeof QueueRoute
@@ -81,11 +94,13 @@ export interface FileRoutesByFullPath {
   '/scan': typeof ScanRoute
   '/settings': typeof SettingsRoute
   '/status': typeof StatusRoute
+  '/users': typeof UsersRoute
   '/auth/$pathname': typeof AuthPathnameRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
   '/events': typeof EventsRoute
   '/queue': typeof QueueRoute
@@ -93,12 +108,14 @@ export interface FileRoutesByTo {
   '/scan': typeof ScanRoute
   '/settings': typeof SettingsRoute
   '/status': typeof StatusRoute
+  '/users': typeof UsersRoute
   '/auth/$pathname': typeof AuthPathnameRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
   '/events': typeof EventsRoute
   '/queue': typeof QueueRoute
@@ -106,6 +123,7 @@ export interface FileRoutesById {
   '/scan': typeof ScanRoute
   '/settings': typeof SettingsRoute
   '/status': typeof StatusRoute
+  '/users': typeof UsersRoute
   '/auth/$pathname': typeof AuthPathnameRoute
 }
 export interface FileRouteTypes {
@@ -113,6 +131,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/analytics'
+    | '/companies'
     | '/contacts'
     | '/events'
     | '/queue'
@@ -120,11 +139,13 @@ export interface FileRouteTypes {
     | '/scan'
     | '/settings'
     | '/status'
+    | '/users'
     | '/auth/$pathname'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/analytics'
+    | '/companies'
     | '/contacts'
     | '/events'
     | '/queue'
@@ -132,11 +153,13 @@ export interface FileRouteTypes {
     | '/scan'
     | '/settings'
     | '/status'
+    | '/users'
     | '/auth/$pathname'
   id:
     | '__root__'
     | '/'
     | '/analytics'
+    | '/companies'
     | '/contacts'
     | '/events'
     | '/queue'
@@ -144,12 +167,14 @@ export interface FileRouteTypes {
     | '/scan'
     | '/settings'
     | '/status'
+    | '/users'
     | '/auth/$pathname'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  CompaniesRoute: typeof CompaniesRoute
   ContactsRoute: typeof ContactsRoute
   EventsRoute: typeof EventsRoute
   QueueRoute: typeof QueueRoute
@@ -157,11 +182,19 @@ export interface RootRouteChildren {
   ScanRoute: typeof ScanRoute
   SettingsRoute: typeof SettingsRoute
   StatusRoute: typeof StatusRoute
+  UsersRoute: typeof UsersRoute
   AuthPathnameRoute: typeof AuthPathnameRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/users': {
+      id: '/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof UsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/status': {
       id: '/status'
       path: '/status'
@@ -211,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ContactsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/companies': {
+      id: '/companies'
+      path: '/companies'
+      fullPath: '/companies'
+      preLoaderRoute: typeof CompaniesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/analytics': {
       id: '/analytics'
       path: '/analytics'
@@ -238,6 +278,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
+  CompaniesRoute: CompaniesRoute,
   ContactsRoute: ContactsRoute,
   EventsRoute: EventsRoute,
   QueueRoute: QueueRoute,
@@ -245,6 +286,7 @@ const rootRouteChildren: RootRouteChildren = {
   ScanRoute: ScanRoute,
   SettingsRoute: SettingsRoute,
   StatusRoute: StatusRoute,
+  UsersRoute: UsersRoute,
   AuthPathnameRoute: AuthPathnameRoute,
 }
 export const routeTree = rootRouteImport

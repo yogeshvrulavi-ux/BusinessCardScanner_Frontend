@@ -1,17 +1,12 @@
 import { API_BASE_URL } from "@/lib/api";
 import { apiFetch } from "@/lib/apiFetch";
 import { parseApiErrorDetail } from "@/lib/apiErrors";
-import {
-  getDeleteContactUrl,
-  getSyncContactToZohoUrl,
-  getSyncPendingToZohoUrl,
-} from "@/lib/backendTargets";
+import { getDeleteContactUrl } from "@/lib/backendTargets";
 import type { LeadPayload } from "@/lib/cardImage";
 import { pickPrimaryEmail, pickSecondaryEmail } from "@/lib/contactEmail";
 
-export type ZohoSyncResult = {
-  zohoLeadId?: string;
-  alreadySynced?: boolean;
+export type SyncResult = {
+  id?: string;
   success?: boolean;
   emailSent?: boolean;
   emailAttempted?: boolean;
@@ -30,7 +25,7 @@ export type ZohoSyncResult = {
   whatsappSendMode?: string | null;
 };
 
-function normalizeZohoSyncResult(data: Record<string, unknown>): ZohoSyncResult {
+function normalizeSyncResult(data: Record<string, unknown>): SyncResult {
   const emailError = (data.email_error as string | null | undefined) ?? null;
   const emailSent = data.email_sent === true || data.emailSent === true;
   const emailAttempted =
@@ -49,10 +44,7 @@ function normalizeZohoSyncResult(data: Record<string, unknown>): ZohoSyncResult 
 
   return {
     success: data.success === true,
-    zohoLeadId:
-      (data.zohoLeadId as string | undefined) ||
-      (data.zoho_lead_id as string | undefined),
-    alreadySynced: Boolean(data.alreadySynced ?? data.already_synced),
+    id: (data.id as string | undefined) || undefined,
     emailSent,
     emailAttempted,
     emailError,
@@ -93,39 +85,21 @@ export async function seedOfflineSampleContact(): Promise<{
   }
 }
 
-export async function saveLeadToZoho(payload: LeadPayload): Promise<void> {
-  let response: Response;
-  try {
-    response = await apiFetch(`${API_BASE_URL}/api/leads/create`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    throw new Error(
-      `Python backend not reachable at ${API_BASE_URL || "port 5000"}. Start: npm run server`,
-    );
-  }
-
-  if (!response.ok) {
-    const errBody = await response.json().catch(() => ({}));
-    throw new Error(
-      parseApiErrorDetail(errBody, "Failed to save lead to Zoho CRM."),
-    );
-  }
-}
-
-export async function syncPayloadToZoho(
+/**
+ * Save a contact to PostgreSQL via the backend API.
+ * The backend transparently handles any CRM sync if configured.
+ */
+export async function saveContactToBackend(
   payload: LeadPayload & { zohoLeadId?: string | null },
   options?: {
     connectionMode?: "online" | "offline";
     skipWhatsApp?: boolean;
     skipEmail?: boolean;
   },
-): Promise<ZohoSyncResult> {
+): Promise<SyncResult> {
   let response: Response;
   try {
-    response = await apiFetch(`${API_BASE_URL}/api/leads/sync-from-local`, {
+    response = await apiFetch(`${API_BASE_URL}/api/contacts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -147,7 +121,6 @@ export async function syncPayloadToZoho(
         eventName: payload.eventName,
         eventId: payload.eventId,
         notes: payload.notes || "",
-        zohoLeadId: payload.zohoLeadId,
         connectionMode: options?.connectionMode ?? "online",
         skipWhatsApp: Boolean(options?.skipWhatsApp),
         skipEmail: Boolean(options?.skipEmail),
@@ -155,7 +128,7 @@ export async function syncPayloadToZoho(
     });
   } catch {
     throw new Error(
-      "Python backend not reachable. Run npm run dev:all (API on port 5000).",
+      "Backend not reachable. Ensure the API server is running.",
     );
   }
 
@@ -163,92 +136,35 @@ export async function syncPayloadToZoho(
 
   if (!response.ok) {
     throw new Error(
-      parseApiErrorDetail(data, "Failed to sync contact to Zoho CRM."),
+      parseApiErrorDetail(data, "Failed to save contact."),
     );
   }
 
-  return normalizeZohoSyncResult(data);
+  return normalizeSyncResult(data);
 }
 
-export async function syncContactToZoho(
-  contactId: string,
-  options?: { skipWhatsApp?: boolean; skipEmail?: boolean },
-): Promise<ZohoSyncResult> {
-  let response: Response;
-  try {
-    response = await apiFetch(getSyncContactToZohoUrl(contactId), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        skipWhatsApp: Boolean(options?.skipWhatsApp),
-        skipEmail: Boolean(options?.skipEmail),
-      }),
-    });
-  } catch {
-    throw new Error(
-      "Python backend not reachable. Run npm run dev:all (API on port 5000).",
-    );
-  }
-
-  const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (!response.ok) {
-    throw new Error(
-      parseApiErrorDetail(data, "Failed to sync contact to Zoho CRM."),
-    );
-  }
-
-  return normalizeZohoSyncResult(data);
-}
-
-export async function deleteZohoLead(leadId: string): Promise<void> {
-  const id = leadId.trim();
-  if (!id || id.startsWith("zoho-")) {
-    throw new Error("Invalid Zoho lead id.");
+/**
+ * Delete a contact from PostgreSQL via the backend API (soft-delete).
+ */
+export async function deleteContactFromBackend(contactId: string): Promise<void> {
+  const id = contactId.trim();
+  if (!id) {
+    throw new Error("Invalid contact id.");
   }
 
   let response: Response;
   try {
-    response = await apiFetch(getDeleteContactUrl(id, "zoho"), {
+    response = await apiFetch(getDeleteContactUrl(id), {
       method: "DELETE",
     });
   } catch {
     throw new Error(
-      "Python backend not reachable. Run npm run dev:all (API on port 5000).",
+      "Backend not reachable. Ensure the API server is running.",
     );
   }
 
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
-    throw new Error(parseApiErrorDetail(data, "Failed to delete contact from Zoho CRM."));
+    throw new Error(parseApiErrorDetail(data, "Failed to delete contact."));
   }
-}
-
-export async function syncAllPendingContactsToZoho(): Promise<{
-  synced: number;
-  total: number;
-}> {
-  let response: Response;
-  try {
-    response = await apiFetch(getSyncPendingToZohoUrl(), {
-      method: "POST",
-    });
-  } catch {
-    throw new Error(
-      "Python backend not reachable. Run npm run dev:all (API on port 5000).",
-    );
-  }
-
-  const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (!response.ok) {
-    throw new Error(
-      parseApiErrorDetail(data, "Failed to sync pending contacts to Zoho CRM."),
-    );
-  }
-
-  return {
-    synced: Number(data.synced ?? 0),
-    total: Number(data.total ?? 0),
-  };
 }

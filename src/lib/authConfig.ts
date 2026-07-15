@@ -1,28 +1,19 @@
-/** SSR-safe auth flag — no Neon SDK import. */
-export const isAuthEnabled = Boolean(import.meta.env.VITE_NEON_AUTH_URL?.trim());
-
-export const neonAuthUrl = import.meta.env.VITE_NEON_AUTH_URL?.trim() ?? "";
-
 /**
- * Neon Auth uses a dedicated `neonauth` host — NOT the Postgres `ep-*.neon.tech` host.
- * Copy the exact Auth URL from Neon Console → Auth.
+ * Auth configuration — backend JWT RBAC system.
+ * Auth is always enabled; the backend URL is resolved from VITE_API_URL or defaults.
  */
-export function getNeonAuthUrlIssue(url: string): string | null {
-  const trimmed = url.trim();
-  if (!trimmed) return "VITE_NEON_AUTH_URL is not set.";
-  if (!trimmed.includes("neonauth") && trimmed.includes(".neon.tech")) {
-    return (
-      "VITE_NEON_AUTH_URL looks like a database host. Use the Auth URL from Neon Console → Auth " +
-      "(hostname contains neonauth, ends with /neondb/auth)."
-    );
-  }
-  if (!trimmed.endsWith("/auth")) {
-    return "VITE_NEON_AUTH_URL should end with /auth (e.g. …/neondb/auth).";
-  }
-  return null;
-}
 
-export const neonAuthConfigIssue =
-  typeof import.meta.env.VITE_NEON_AUTH_URL === "string"
-    ? getNeonAuthUrlIssue(import.meta.env.VITE_NEON_AUTH_URL)
-    : null;
+/** True when backend JWT auth is active (always true for RBAC). */
+export const isAuthEnabled = true;
+
+/** Resolve backend API base URL for auth endpoints. */
+export function getAuthApiBase(): string {
+  const configured = import.meta.env.VITE_API_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  if (import.meta.env.DEV) return "http://127.0.0.1:5000";
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host.includes("onrender.com")) return window.location.origin;
+  }
+  return "https://businessscannercardbackend.onrender.com";
+}

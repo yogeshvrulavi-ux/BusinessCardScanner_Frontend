@@ -1,33 +1,22 @@
-import { useEffect, useState } from "react";
-
 import { AuthCredentialsForm } from "@/components/auth/AuthCredentialsForm";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
+import { AccessDeniedPanel } from "@/components/auth/AccessDeniedPanel";
 import { AuthScannerPanel } from "@/components/auth/AuthScannerPanel";
 import { NeuralVortexBackground } from "@/components/ui/interactive-neural-vortex-background";
 import { LEGAL_CONTACT_EMAIL, LEGAL_CONTACT_PHONE, LEGAL_PAGE_URLS } from "@/constants/legalContent";
-import { neonAuthConfigIssue } from "@/lib/authConfig";
-import { checkNeonAuthHealth } from "@/lib/authHealth";
 import { useForceLightMode } from "@/hooks/useForceLightMode";
 
-type AuthMode = "sign-in" | "sign-up" | "forgot-password";
+type AuthMode = "sign-in" | "forgot-password" | "access-denied";
 
 function normalizeMode(pathname: string): AuthMode {
-  if (pathname === "sign-up") return "sign-up";
   if (pathname === "forgot-password") return "forgot-password";
+  if (pathname === "access-denied") return "access-denied";
   return "sign-in";
 }
 
 export function AuthPage({ pathname }: { pathname: string }) {
   const mode = normalizeMode(pathname);
   useForceLightMode(true);
-  const [authHealthMessage, setAuthHealthMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (neonAuthConfigIssue) return;
-    checkNeonAuthHealth().then((status) => {
-      if (!status.ok) setAuthHealthMessage(status.detail);
-    });
-  }, []);
 
   return (
     <div className="light flex min-h-svh w-full max-w-[100vw] flex-col overflow-x-hidden bg-background lg:min-h-svh lg:flex-row">
@@ -67,18 +56,10 @@ export function AuthPage({ pathname }: { pathname: string }) {
 
         <div className="relative z-10 flex flex-1 items-center justify-center overflow-y-auto px-5 py-10 sm:px-10 lg:px-14 lg:py-14">
           <div className="w-full min-w-0 max-w-xl sm:max-w-2xl lg:max-w-2xl">
-            {neonAuthConfigIssue ? (
-              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                {neonAuthConfigIssue}
-              </div>
-            ) : null}
-            {authHealthMessage ? (
-              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-                {authHealthMessage}
-              </div>
-            ) : null}
             {mode === "forgot-password" ? (
               <ForgotPasswordForm />
+            ) : mode === "access-denied" ? (
+              <AccessDeniedPanel />
             ) : (
               <AuthCredentialsForm mode={mode} />
             )}

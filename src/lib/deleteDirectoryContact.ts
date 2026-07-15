@@ -1,4 +1,4 @@
-import { deleteZohoLead } from "@/lib/contactApi";
+import { deleteContactFromBackend } from "@/lib/contactApi";
 import type { DirectoryContact } from "@/lib/contactsDirectory";
 import {
   invalidateContactsDirectory,
@@ -6,7 +6,6 @@ import {
 } from "@/lib/contactsDirectory";
 import { contactBelongsToAppUser, getCurrentAppUser } from "@/lib/currentAppUser";
 import {
-  deleteStoredContact,
   getQueueItems,
   getStoredContactById,
   removeQueueItem,
@@ -48,7 +47,7 @@ async function assertContactOwnedByCurrentUser(
   }
 }
 
-/** Delete by Contacts table row (soft-delete in Zoho; user-scoped local cache). */
+/** Delete a contact — removes from queue or soft-deletes via PostgreSQL backend. */
 export async function deleteDirectoryContact(contact: DirectoryContact): Promise<void> {
   await assertContactOwnedByCurrentUser(contact);
   const appUser = await getCurrentAppUser();
@@ -60,27 +59,9 @@ export async function deleteDirectoryContact(contact: DirectoryContact): Promise
     return;
   }
 
-  if (contact.source === "zoho") {
-    await deleteZohoLead(contact.id);
-    removeOutreachStatusForContact(contact, appUser);
-    notifyContactsListChanged(contact);
-    return;
-  }
-
-  if (contact.source === "indexeddb" || contact.source === "localdb") {
-    const stored = await getStoredContactById(contact.id);
-    const zohoLeadId = String(contact.zohoLeadId || stored?.zohoLeadId || "").trim();
-    await deleteStoredContact(contact.id);
-    if (zohoLeadId) {
-      try {
-        await deleteZohoLead(zohoLeadId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Zoho soft-delete failed";
-        throw new Error(
-          `Removed on this device, but Zoho update failed: ${message}`,
-        );
-      }
-    }
+  if (contact.source === "localdb" || contact.source === "indexeddb") {
+    // Soft-delete via PostgreSQL backend
+    await deleteContactFromBackend(contact.id);
     removeOutreachStatusForContact(contact, appUser);
     notifyContactsListChanged(contact);
     return;

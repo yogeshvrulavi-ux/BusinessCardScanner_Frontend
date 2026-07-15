@@ -25,7 +25,7 @@ import {
 } from "@/lib/localContactApi";
 import { recordContactEventLink } from "@/lib/eventStorage";
 import { getConnectionMode } from "@/lib/connectionMode";
-import { syncPayloadToZoho, seedOfflineSampleContact } from "@/lib/contactApi";
+import { saveContactToBackend, seedOfflineSampleContact } from "@/lib/contactApi";
 import {
   getCurrentAppUser,
   stampCapturedByFields,
@@ -63,7 +63,7 @@ export async function getContactById(contactId: string): Promise<StoredContact |
   return contact as StoredContact | null;
 }
 
-/** Offline = no internet (or explicit offline). Online = Zoho + email. */
+/** Offline = no internet (or explicit offline). Online = PostgreSQL backend. */
 function isOfflineSave(options?: { connectionMode?: "online" | "offline" }): boolean {
   if (typeof navigator !== "undefined" && !navigator.onLine) return true;
   if (options?.connectionMode === "offline") return true;
@@ -82,29 +82,10 @@ function notifyContactsListChanged(): void {
   }
 }
 
-type ZohoSaveFields = {
-  zohoLeadId?: string;
-  zohoSynced?: boolean;
-  alreadySynced?: boolean;
-  zohoError?: string;
-  emailSent?: boolean;
-  emailAttempted?: boolean;
-  emailError?: string | null;
-  emailTo?: string | null;
-  emailExtracted?: string | null;
-  whatsappSent?: boolean;
-  whatsappAttempted?: boolean;
-  whatsappError?: string | null;
-  whatsappTo?: string | null;
-  whatsappMessageId?: string | null;
-  whatsappDeliveryStatus?: string | null;
-  whatsappSendMode?: string | null;
-};
-
 async function persistOutreachStatus(
   payload: LeadPayload,
-  zoho: {
-    zohoLeadId?: string;
+  result: {
+    id?: string;
     emailSent?: boolean;
     emailAttempted?: boolean;
     emailError?: string | null;
@@ -116,19 +97,18 @@ async function persistOutreachStatus(
 ): Promise<void> {
   await recordOutreachFromSyncResult(
     {
-      zohoLeadId: zoho.zohoLeadId,
       email: pickPrimaryEmail(payload),
       phone: payload.phone,
       name: payload.fullName,
     },
-    zoho,
+    result,
   );
 }
 
 async function saveOfflineToIndexedDbQueue(
   payload: LeadPayload,
   cardImageBase64?: string,
-  errorMessage = "Saved offline — will sync to Zoho when online",
+  errorMessage = "Saved offline — will sync when online",
 ): Promise<{ id: string; queued: true }> {
   const email = pickPrimaryEmail(payload);
   const appUser = await getCurrentAppUser();
@@ -145,20 +125,20 @@ async function saveOfflineToIndexedDbQueue(
   return { id: item.id, queued: true };
 }
 
-async function saveOnlineDirectToZoho(
+async function saveOnlineToPostgres(
   payload: LeadPayload,
   cardImageBase64?: string,
   options?: {
     skipWhatsApp?: boolean;
     skipEmail?: boolean;
   },
-): Promise<{ id: string; queued?: boolean } & ZohoSaveFields> {
+): Promise<{ id: string; queued?: boolean; error?: string }> {
   const email = pickPrimaryEmail(payload);
   const body = { ...payload, email };
   const skipEmail = Boolean(options?.skipEmail) || !email;
 
   try {
-    const zoho = await syncPayloadToZoho(body, {
+    const result = await saveContactToBackend(body, {
       connectionMode: "online",
       skipWhatsApp: options?.skipWhatsApp,
       skipEmail,
@@ -166,55 +146,38 @@ async function saveOnlineDirectToZoho(
     if (body.eventName?.trim()) {
       recordContactEventLink({
         eventName: body.eventName.trim(),
-        zohoLeadId: zoho.zohoLeadId,
         email,
         phone: body.phone,
       });
     }
     const { recordDirectZohoCapture } = await import("@/lib/captureSourceAnalytics");
     recordDirectZohoCapture();
-    await persistOutreachStatus(body, zoho);
+    await persistOutreachStatus(body, result);
     notifyContactsListChanged();
     return {
-      id: zoho.zohoLeadId || crypto.randomUUID(),
-      zohoLeadId: zoho.zohoLeadId,
-      zohoSynced: Boolean(zoho.zohoLeadId),
-      alreadySynced: zoho.alreadySynced,
-      emailSent: zoho.emailSent,
-      emailAttempted: zoho.emailAttempted,
-      emailError: zoho.emailError,
-      emailTo: zoho.emailTo,
-      emailExtracted: zoho.emailExtracted || email || null,
-      whatsappSent: zoho.whatsappSent,
-      whatsappAttempted: zoho.whatsappAttempted,
-      whatsappError: zoho.whatsappError,
-      whatsappTo: zoho.whatsappTo,
-      whatsappMessageId: zoho.whatsappMessageId,
-      whatsappDeliveryStatus: zoho.whatsappDeliveryStatus,
-      whatsappSendMode: zoho.whatsappSendMode,
+      id: result.id || crypto.randomUUID(),
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Zoho sync failed";
+    const message = err instanceof Error ? err.message : "Save failed";
     const fallback = await saveOfflineToIndexedDbQueue(body, cardImageBase64, message);
-    return { ...fallback, zohoError: message };
+    return { ...fallback, error: message };
   }
 }
 
-export async function syncQueueItemToZoho(
+/** Sync a single queued contact to the backend. */
+export async function syncQueueItem(
   item: QueueItem,
   options?: { skipWhatsApp?: boolean; skipEmail?: boolean },
 ): Promise<{
-  zohoLeadId?: string;
+  id?: string;
   emailSent?: boolean;
   emailError?: string | null;
-  emailTo?: string | null;
-  emailExtracted?: string | null;
 }> {
   if (!navigator.onLine) {
-    throw new Error("No internet. Connect to sync to Zoho CRM.");
+    throw new Error("No internet connection.");
   }
   const payload = queueContactToPayload(item.contact_data);
-  const result = await syncPayloadToZoho(payload, {
+  const result = await saveContactToBackend(payload, {
     connectionMode: "online",
     skipWhatsApp: options?.skipWhatsApp,
     skipEmail: options?.skipEmail,
@@ -222,7 +185,6 @@ export async function syncQueueItemToZoho(
   if (payload.eventName?.trim()) {
     recordContactEventLink({
       eventName: payload.eventName.trim(),
-      zohoLeadId: result.zohoLeadId,
       email: pickPrimaryEmail(payload),
       phone: payload.phone,
     });
@@ -233,15 +195,14 @@ export async function syncQueueItemToZoho(
   recordQueueSyncedToZoho();
   notifyContactsListChanged();
   return {
-    zohoLeadId: result.zohoLeadId,
+    id: result.id,
     emailSent: result.emailSent,
     emailError: result.emailError,
-    emailTo: result.emailTo,
-    emailExtracted: result.emailExtracted || pickPrimaryEmail(payload),
   };
 }
 
-export async function syncAllQueueItemsToZoho(options?: {
+/** Sync all pending queue items to the backend. */
+export async function syncAllQueueItems(options?: {
   skipWhatsApp?: boolean;
   skipEmail?: boolean;
 }): Promise<{ synced: number; total: number }> {
@@ -255,10 +216,10 @@ export async function syncAllQueueItemsToZoho(options?: {
         status: "retrying",
         last_attempt: new Date().toISOString(),
       });
-      await syncQueueItemToZoho(item, options);
+      await syncQueueItem(item, options);
       synced += 1;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Zoho sync failed";
+      const message = err instanceof Error ? err.message : "Sync failed";
       const nextRetry = item.retry_count + 1;
       await updateQueueItem({
         ...item,
@@ -283,14 +244,7 @@ export async function saveContact(
 ): Promise<{
   id: string;
   queued?: boolean;
-  zohoLeadId?: string;
-  zohoSynced?: boolean;
-  alreadySynced?: boolean;
-  zohoError?: string;
-  emailSent?: boolean;
-  emailError?: string | null;
-  emailTo?: string | null;
-  emailExtracted?: string | null;
+  error?: string;
 }> {
   await resolveStorageMode();
   const mode = options?.connectionMode ?? saveConnectionMode();
@@ -299,7 +253,7 @@ export async function saveContact(
     return saveOfflineToIndexedDbQueue(payload, cardImageBase64);
   }
 
-  return saveOnlineDirectToZoho(payload, cardImageBase64, options);
+  return saveOnlineToPostgres(payload, cardImageBase64, options);
 }
 
 export async function updateContact(contactId: string, payload: LeadPayload): Promise<void> {
@@ -318,139 +272,42 @@ export async function deleteContact(contactId: string): Promise<void> {
   await deleteStoredContact(contactId);
 }
 
-export async function markContactSyncedZoho(
+export async function markContactSynced(
   contactId: string,
-  zohoLeadId: string,
 ): Promise<void> {
-  await patchStoredContactSyncStatus(contactId, "synced_zoho", zohoLeadId);
+  await patchStoredContactSyncStatus(contactId, "synced", undefined);
 }
 
-export async function syncContactToZohoStorage(
-  contactId: string,
-  options?: { skipWhatsApp?: boolean; skipEmail?: boolean },
-  payloadOverride?: LeadPayload,
-): Promise<{
-  zohoLeadId?: string;
-  alreadySynced?: boolean;
-  emailSent?: boolean;
-  emailError?: string | null;
-  emailTo?: string | null;
-  emailExtracted?: string | null;
-}> {
-  let payload = payloadOverride;
-  let alreadyInZoho = false;
-  const contact = await getStoredContactById(contactId);
-  if (contact) {
-    payload = payload ?? localContactToPayload(contact as LocalContact);
-    alreadyInZoho = Boolean(
-      contact.zohoLeadId || contact.syncStatus === "synced_zoho",
-    );
-  }
-
-  if (!payload) {
-    throw new Error("Contact not found for Zoho sync");
-  }
-
-  const email = pickPrimaryEmail(payload);
-  const zohoLeadId =
-    (payload as LeadPayload & { zohoLeadId?: string | null }).zohoLeadId ??
-    (contact?.zohoLeadId ? String(contact.zohoLeadId) : undefined);
-
-  const result = await syncPayloadToZoho(
-    {
-      ...payload,
-      email,
-      ...(zohoLeadId ? { zohoLeadId } : {}),
-    },
-    { connectionMode: "online", ...options },
-  );
-
-  if (payload.eventName?.trim()) {
-    recordContactEventLink({
-      eventName: payload.eventName.trim(),
-      zohoLeadId: result.zohoLeadId,
-      email,
-      phone: payload.phone,
-    });
-  }
-
-  if (contact && result.zohoLeadId) {
-    await markContactSyncedZoho(contactId, result.zohoLeadId);
-  }
-
-  await persistOutreachStatus(payload, result);
-  notifyContactsListChanged();
-  return {
-    ...result,
-    zohoLeadId: result.zohoLeadId || contactId,
-    alreadySynced: alreadyInZoho || result.alreadySynced,
-    emailExtracted: result.emailExtracted || email || null,
-  };
-}
-
-export async function syncAllPendingToZohoStorage(options?: {
-  skipWhatsApp?: boolean;
-  skipEmail?: boolean;
-}): Promise<{ synced: number; total: number }> {
-  const contacts = await listStoredContacts();
-  const pending = contacts.filter(
-    (c) => c.syncStatus !== "synced_zoho" && !c.zohoLeadId,
-  );
-  let synced = 0;
-  for (const contact of pending) {
-    const id = String(contact.id || "");
-    if (!id) continue;
-    try {
-      const result = await syncContactToZohoStorage(id, options);
-      if (result.zohoLeadId || result.alreadySynced) {
-        synced += 1;
-      }
-    } catch {
-      /* continue */
-    }
-  }
-  return { synced, total: pending.length };
-}
-
-export type AutoZohoSyncResult = {
+export type AutoSyncResult = {
   queueSynced: number;
   queueTotal: number;
-  contactsSynced: number;
-  contactsTotal: number;
 };
 
-let autoZohoSyncInFlight: Promise<AutoZohoSyncResult> | null = null;
+let autoSyncInFlight: Promise<AutoSyncResult> | null = null;
 
-export async function runAutoZohoSyncWhenOnline(options?: {
+export async function runAutoSyncWhenOnline(options?: {
   skipWhatsApp?: boolean;
   skipEmail?: boolean;
-}): Promise<AutoZohoSyncResult> {
+}): Promise<AutoSyncResult> {
   if (typeof navigator !== "undefined" && !navigator.onLine) {
-    return { queueSynced: 0, queueTotal: 0, contactsSynced: 0, contactsTotal: 0 };
+    return { queueSynced: 0, queueTotal: 0 };
   }
 
-  if (autoZohoSyncInFlight) {
-    return autoZohoSyncInFlight;
+  if (autoSyncInFlight) {
+    return autoSyncInFlight;
   }
 
-  autoZohoSyncInFlight = (async () => {
-    const queue = await syncAllQueueItemsToZoho(options);
-    const contacts = await syncAllPendingToZohoStorage(options);
+  autoSyncInFlight = (async () => {
+    const queue = await syncAllQueueItems(options);
     return {
       queueSynced: queue.synced,
       queueTotal: queue.total,
-      contactsSynced: contacts.synced,
-      contactsTotal: contacts.total,
     };
   })().finally(() => {
-    autoZohoSyncInFlight = null;
+    autoSyncInFlight = null;
   });
 
-  return autoZohoSyncInFlight;
-}
-
-export function isContactPendingZoho(contact: StoredContact): boolean {
-  return contact.syncStatus !== "synced_zoho" && !contact.zohoLeadId;
+  return autoSyncInFlight;
 }
 
 export function shouldUseIndexedDbQueueSync(): boolean {

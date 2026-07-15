@@ -27,7 +27,7 @@ import {
 } from "@/constants/legalContent";
 import { LegalDocumentModal } from "@/components/legal/LegalDocumentModal";
 import { toast } from "sonner";
-import { authClient } from "@/auth";
+import { useAuth } from "@/lib/AuthContext";
 import { syncProfileFromAuthUser } from "@/lib/authProfileSync";
 import { useConfirmModal } from "@/components/ui/confirm-modal";
 import { hasCookieConsent, saveCookieConsent } from "@/lib/cookieConsent";
@@ -79,7 +79,7 @@ function SettingRow({
 
 export function SettingsPage() {
   const { confirm } = useConfirmModal();
-  const { data: authSession } = authClient.useSession();
+  const { user: authUser, refetchProfile } = useAuth();
   const [profile, setProfile] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [isSaving, setIsSaving] = useState(false);
   const [isWiping, setIsWiping] = useState(false);
@@ -89,12 +89,12 @@ export function SettingsPage() {
   const initials = useMemo(() => getUserInitials(profile.fullName), [profile.fullName]);
 
   useEffect(() => {
-    if (authSession?.user) {
-      syncProfileFromAuthUser(authSession.user);
+    if (authUser) {
+      syncProfileFromAuthUser(authUser);
     }
     const loaded = loadUserSettings();
-    const authEmail = authSession?.user?.email?.trim();
-    const authName = authSession?.user?.name?.trim();
+    const authEmail = authUser?.email?.trim();
+    const authName = authUser ? `${authUser.first_name} ${authUser.last_name}`.trim() : "";
     const mergedProfile = {
       ...loaded,
       ...(authEmail ? { email: authEmail } : {}),
@@ -108,7 +108,7 @@ export function SettingsPage() {
     );
     document.documentElement.classList.remove("dark");
     localStorage.removeItem("cs-dark");
-  }, [authSession?.user?.email, authSession?.user?.name]);
+  }, [authUser?.email, authUser?.first_name, authUser?.last_name]);
 
   const updateProfileField = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
     setProfile((prev) => ({ ...prev, [key]: value }));
@@ -167,7 +167,7 @@ export function SettingsPage() {
     const ok = await confirm({
       title: "Delete your data?",
       description:
-        "Remove your contacts, queue, and outreach status on this device. Zoho records are marked deleted (not permanently removed) and only for your account.",
+        "Remove your contacts, queue, and outreach status on this device. Records are soft-deleted for audit and recovery.",
       confirmLabel: "Delete my data",
       destructive: true,
     });
@@ -310,8 +310,8 @@ export function SettingsPage() {
             />
             <SettingRow
               icon={<Wifi className="h-4 w-4" />}
-              title="Auto-sync to Zoho CRM when online"
-              description="When back online, sync the offline queue to Zoho CRM and send email follow-ups"
+              title="Auto-sync to database when online"
+              description="When back online, sync the offline queue to the database and send email follow-ups"
               checked={profile.autoSyncToZohoWhenOnline}
               onCheckedChange={(v) => {
                 persistToggle(
@@ -320,10 +320,10 @@ export function SettingsPage() {
                   v ? "Auto-sync to Zoho enabled." : "Auto-sync to Zoho disabled.",
                 );
                 if (v && typeof navigator !== "undefined" && navigator.onLine) {
-                  void import("@/lib/autoZohoSync").then(({ maybeAutoSyncToZohoWhenOnline }) =>
-                    maybeAutoSyncToZohoWhenOnline().then((summary) => {
-                      if (summary.ran && summary.queueSynced + summary.contactsSynced > 0) {
-                        toast.success("Pending contacts synced to Zoho CRM.");
+                  void import("@/lib/autoZohoSync").then(({ maybeAutoSyncWhenOnline }) =>
+                    maybeAutoSyncWhenOnline().then((summary) => {
+                      if (summary.ran && summary.queueSynced > 0) {
+                        toast.success("Pending contacts synced to database.");
                         window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
                         window.dispatchEvent(new CustomEvent("cs-queue-updated"));
                       }

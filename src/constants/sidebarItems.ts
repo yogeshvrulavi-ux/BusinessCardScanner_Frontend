@@ -1,12 +1,24 @@
-import { BarChart3, FolderKanban, Inbox, LayoutDashboard, ScanLine, Settings, Users } from "lucide-react";
-import { NAV } from "@/constants/navigation";
+import { LayoutDashboard, ScanLine } from "lucide-react";
+import type { UserRole } from "@/lib/AuthContext";
 
-export const sidebarItems = [
-  { title: "Overview", url: "/", icon: LayoutDashboard },
-  { title: NAV.capture.label, url: NAV.capture.path, icon: ScanLine },
-  { title: NAV.contacts.label, url: NAV.contacts.path, icon: Users },
-  { title: NAV.events.label, url: NAV.events.path, icon: FolderKanban },
-  { title: NAV.syncQueue.label, url: NAV.syncQueue.path, icon: Inbox },
-  { title: "Insights", url: "/analytics", icon: BarChart3 },
-  { title: NAV.preferences.label, url: NAV.preferences.path, icon: Settings },
+export type SidebarItem = {
+  title: string;
+  url: string;
+  icon: typeof LayoutDashboard;
+  /** Roles that can see this menu item. If omitted, visible to all authenticated users. */
+  roles?: UserRole[];
+};
+
+export const sidebarItems: SidebarItem[] = [
+  { title: "Dashboard", url: "/scan", icon: LayoutDashboard },
+  { title: "Capture Card", url: "/scan", icon: ScanLine },
 ];
+
+/** Filter sidebar items based on the user's role. */
+export function getSidebarItemsForRole(role: UserRole | undefined): SidebarItem[] {
+  if (!role) return [];
+  return sidebarItems.filter((item) => {
+    if (!item.roles) return true; // No restriction
+    return item.roles.includes(role);
+  });
+}

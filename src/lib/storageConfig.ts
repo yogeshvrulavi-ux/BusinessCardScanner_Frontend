@@ -24,5 +24,5 @@ export function isIndexedDbStorage(): boolean {
 
 export function storageLabel(options?: { online?: boolean }): string {
   const online = options?.online ?? false;
-  return online ? "Zoho CRM" : "Offline queue (device)";
+  return online ? "PostgreSQL" : "Offline queue (device)";
 }

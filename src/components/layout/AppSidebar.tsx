@@ -1,7 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { AppLogo } from "@/components/brand/AppLogo";
-import { sidebarItems } from "@/constants/sidebarItems";
+import { getSidebarItemsForRole } from "@/constants/sidebarItems";
 import { NAV_SECTION_LABEL } from "@/constants/navigation";
+import { useAuth } from "@/lib/AuthContext";
 
 import {
   Sidebar,
@@ -16,14 +17,13 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const items = sidebarItems.filter((item) =>
-  ["/scan", "/contacts", "/events", "/queue", "/settings"].includes(item.url),
-);
-
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const path = useRouterState({ select: (r) => r.location.pathname });
+  const { user } = useAuth();
+
+  const items = getSidebarItemsForRole(user?.role);
 
   const isActive = (url: string) => {
     if (url === "/scan") {
@@ -33,7 +33,7 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-border/60">
+    <Sidebar collapsible="icon" className="border-b border-border/60">
       <SidebarHeader className="px-3 pt-4">
         <Link to="/scan" className="flex items-center gap-2.5 px-2 py-1.5">
           <AppLogo size={collapsed ? "sm" : "md"} />
@@ -75,6 +75,18 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Role badge */}
+        {!collapsed && user?.role && (
+          <div className="mt-auto px-3 pb-4">
+            <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2">
+              <div className="h-2 w-2 rounded-full bg-primary" />
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {user.role === "SUPER_ADMIN" ? "Super Admin" : user.role === "ADMIN" ? "Admin" : "User"}
+              </span>
+            </div>
+          </div>
+        )}
       </SidebarContent>
     </Sidebar>
   );

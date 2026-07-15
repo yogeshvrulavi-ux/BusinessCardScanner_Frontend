@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "@neondatabase/auth-ui/tailwind";
 
 
 @source "../src";
@@ -262,7 +261,7 @@
 .shader-hero-delay-600 { animation-delay: 0.6s; }
 .shader-hero-delay-800 { animation-delay: 0.8s; }
 
-/* NeonAuthUIProvider ships a default bottom toaster; app uses top-right only */
+/* Hide duplicate toaster if one appears at bottom */
 [data-sonner-toaster][data-y-position="bottom"] {
   display: none !important;
 }

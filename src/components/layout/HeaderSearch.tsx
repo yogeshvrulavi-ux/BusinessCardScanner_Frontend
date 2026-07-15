@@ -21,9 +21,8 @@ type HeaderSearchProps = {
 };
 
 function sourceBadge(source: DirectoryContact["source"]): string {
-  if (source === "zoho") return "Zoho";
   if (source === "queue") return "Queue";
-  return "Device";
+  return "Database";
 }
 
 export function HeaderSearch({

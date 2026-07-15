@@ -1,11 +1,9 @@
-import { UserCircle2, Settings, LogOut } from "lucide-react";
+import { UserCircle2, Settings, LogOut, Shield } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { HeaderSearch } from "@/components/layout/HeaderSearch";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { authClient } from "@/auth";
-import { isAuthEnabled } from "@/lib/authConfig";
-import { clearAuthTokenCache } from "@/lib/authSession";
+import { useAuth } from "@/lib/AuthContext";
 import { invalidateContactsDirectory } from "@/lib/contactsDirectory";
 import { getQueueItems } from "@/lib/indexeddb";
 import { seedOfflineSampleContact } from "@/lib/contactStorage";
@@ -32,31 +30,34 @@ export function TopBar() {
   const [connectionMode, setConnectionModeState] = useState<ConnectionMode>("online");
   const [pendingCount, setPendingCount] = useState(0);
   const { fullName: profileName, initials: profileInitials } = useUserSettings();
-  const { data: authSession } = authClient.useSession();
+  const { user, logout } = useAuth();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
 
   const displayName =
     profileName ||
-    authSession?.user?.name?.trim() ||
-    authSession?.user?.email?.trim() ||
+    (user ? `${user.first_name} ${user.last_name}`.trim() : "") ||
+    user?.email ||
     "Account";
 
   const avatarInitials =
     profileInitials ||
-    authSession?.user?.name?.trim()?.slice(0, 2).toUpperCase() ||
-    authSession?.user?.email?.trim()?.slice(0, 2).toUpperCase() ||
+    (user?.first_name ? `${user.first_name[0]}${user.last_name?.[0] || ""}`.toUpperCase() : "") ||
+    user?.email?.slice(0, 2).toUpperCase() ||
     "??";
 
+  const roleBadge = user?.role === "SUPER_ADMIN"
+    ? "Super Admin"
+    : user?.role === "ADMIN"
+    ? "Admin"
+    : user?.role === "USER"
+    ? "User"
+    : "";
+
   const handleSignOut = async () => {
-    clearAuthTokenCache();
     invalidateContactsDirectory();
-    if (isAuthEnabled) {
-      await authClient.signOut();
-      navigate({ to: "/auth/$pathname", params: { pathname: "sign-in" } });
-      return;
-    }
-    navigate({ to: "/scan" });
+    await logout();
+    navigate({ to: "/auth/$pathname", params: { pathname: "sign-in" }, replace: true });
   };
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -194,6 +195,14 @@ export function TopBar() {
               <UserCircle2 className="h-4 w-4 shrink-0" />
               <span className="truncate">{displayName}</span>
             </DropdownMenuLabel>
+            {roleBadge && (
+              <div className="px-2 pb-1.5">
+                <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                  <Shield className="h-3 w-3" />
+                  {roleBadge}
+                </span>
+              </div>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
               <Settings className="mr-2 h-4 w-4" />

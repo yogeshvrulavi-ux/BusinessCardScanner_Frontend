@@ -1,24 +1,14 @@
-import { Outlet, useNavigate } from "@tanstack/react-router";
-import { NeonAuthUIProvider } from "@neondatabase/auth-ui";
+import { Outlet } from "@tanstack/react-router";
 
-import { authClient } from "@/auth";
+import { AuthProvider } from "@/lib/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/layouts/AppShell";
 
 export function RootLayout() {
-  const navigate = useNavigate();
-
   return (
-    <NeonAuthUIProvider
-      authClient={authClient}
-      defaultTheme="light"
-      navigate={(href) => {
-        navigate({ to: href });
-      }}
-      credentials={{ forgotPassword: true }}
-    >
+    <AuthProvider>
       <AppShell />
       <Toaster position="top-right" />
-    </NeonAuthUIProvider>
+    </AuthProvider>
   );
 }

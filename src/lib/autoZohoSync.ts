@@ -1,35 +1,27 @@
-import { getQueueItems, listStoredContacts } from "@/lib/indexeddb";
-import { isContactPendingZoho, runAutoZohoSyncWhenOnline, type StoredContact } from "@/lib/contactStorage";
+import { getQueueItems } from "@/lib/indexeddb";
+import { syncAllQueueItems, type AutoSyncResult } from "@/lib/contactStorage";
 import { loadUserSettings } from "@/lib/settingsStorage";
 
-export type AutoZohoSyncSummary = {
+export type AutoSyncSummary = {
   ran: boolean;
   queueSynced: number;
   queueTotal: number;
-  contactsSynced: number;
-  contactsTotal: number;
 };
 
-export async function countPendingZohoSync(): Promise<{ queue: number; contacts: number }> {
+export async function countPendingSync(): Promise<{ queue: number }> {
   const queue = await getQueueItems();
   const queuePending = queue.filter(
     (item) => item.status === "pending" || item.status === "retrying",
   ).length;
-  const contacts = await listStoredContacts();
-  const contactsPending = contacts.filter((c) =>
-    isContactPendingZoho(c as StoredContact),
-  ).length;
-  return { queue: queuePending, contacts: contactsPending };
+  return { queue: queuePending };
 }
 
-/** Run automatic Zoho sync when online if the user enabled it in Settings. */
-export async function maybeAutoSyncToZohoWhenOnline(): Promise<AutoZohoSyncSummary> {
-  const empty: AutoZohoSyncSummary = {
+/** Run automatic sync to PostgreSQL when online if the user enabled it in Settings. */
+export async function maybeAutoSyncWhenOnline(): Promise<AutoSyncSummary> {
+  const empty: AutoSyncSummary = {
     ran: false,
     queueSynced: 0,
     queueTotal: 0,
-    contactsSynced: 0,
-    contactsTotal: 0,
   };
 
   if (typeof navigator === "undefined" || !navigator.onLine) {
@@ -45,19 +37,20 @@ export async function maybeAutoSyncToZohoWhenOnline(): Promise<AutoZohoSyncSumma
   const queuePending = queue.filter(
     (item) => item.status === "pending" || item.status === "retrying",
   );
-  const contacts = await listStoredContacts();
-  const contactsPending = contacts.filter((c) =>
-    isContactPendingZoho(c as StoredContact),
-  );
 
-  if (queuePending.length === 0 && contactsPending.length === 0) {
+  if (queuePending.length === 0) {
     return empty;
   }
 
-  const result = await runAutoZohoSyncWhenOnline({
+  const result = await syncAllQueueItems({
     skipWhatsApp: !prefs.whatsappNotificationsEnabled,
     skipEmail: !prefs.emailNotificationsEnabled,
   });
 
   return { ran: true, ...result };
 }
+
+// Legacy aliases for backward compatibility
+export const countPendingZohoSync = countPendingSync;
+export const maybeAutoSyncToZohoWhenOnline = maybeAutoSyncWhenOnline;
+export type AutoZohoSyncSummary = AutoSyncSummary;

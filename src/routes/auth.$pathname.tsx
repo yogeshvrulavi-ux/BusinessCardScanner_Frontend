@@ -1,7 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { AuthPage } from "@/pages/AuthPage";
-import { authClient } from "@/auth";
-import { clearAuthTokenCache } from "@/lib/authSession";
 
 export const Route = createFileRoute("/auth/$pathname")({
   ssr: false,
@@ -9,8 +7,8 @@ export const Route = createFileRoute("/auth/$pathname")({
     meta: [
       {
         title:
-          params.pathname === "sign-up"
-            ? "Create account · CardSync AI"
+          params.pathname === "access-denied"
+            ? "Access Denied · CardSync AI"
             : params.pathname === "forgot-password"
               ? "Reset password · CardSync AI"
               : "Sign in · CardSync AI",
@@ -19,8 +17,7 @@ export const Route = createFileRoute("/auth/$pathname")({
   }),
   beforeLoad: async ({ params }) => {
     if (params.pathname === "sign-out") {
-      clearAuthTokenCache();
-      await authClient.signOut();
+      // Sign-out is handled by AuthContext logout, redirect to sign-in
       throw redirect({ to: "/auth/$pathname", params: { pathname: "sign-in" }, replace: true });
     }
 

@@ -6,79 +6,35 @@ import { z } from "zod";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { authClient } from "@/auth";
+import { useAuth } from "@/lib/AuthContext";
 import { AppLogo } from "@/components/brand/AppLogo";
 import { AuthField } from "@/components/auth/AuthField";
 import { resolvePostAuthPath } from "@/components/auth/AuthGate";
-import { clearAuthTokenCache } from "@/lib/authSession";
 import { invalidateContactsDirectory } from "@/lib/contactsDirectory";
-import { syncProfileFromAuthUser } from "@/lib/authProfileSync";
-import { saveUserSettings } from "@/lib/settingsStorage";
-import { neonAuthConfigIssue, neonAuthUrl } from "@/lib/authConfig";
 import { cn } from "@/lib/utils";
 
-type AuthMode = "sign-in" | "sign-up";
+type AuthMode = "sign-in";
 
 const signInSchema = z.object({
-  email: z.string().email("Enter a valid email"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  identifier: z.string().min(1, "Enter your email or username"),
+  password: z.string().min(1, "Enter your password"),
   rememberMe: z.boolean().optional(),
 });
 
-const signUpSchema = z
-  .object({
-    name: z.string().min(2, "Enter your full name"),
-    email: z.string().email("Enter a valid email"),
-    phone: z
-      .string()
-      .min(8, "Enter a valid phone number")
-      .max(20, "Phone number is too long")
-      .regex(/^[\d+\s().-]+$/, "Use digits and + ( ) - only"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  });
-
 type SignInValues = z.infer<typeof signInSchema>;
-type SignUpValues = z.infer<typeof signUpSchema>;
-
-const copy: Record<
-  AuthMode,
-  {
-    title: string;
-    subtitle: string;
-    submit: string;
-    footer?: { text: string; linkText: string; pathname: "sign-in" | "sign-up" };
-  }
-> = {
-  "sign-in": {
-    title: "Welcome back",
-    subtitle: "Sign in to continue scanning and syncing contacts.",
-    submit: "Log in",
-    footer: { text: "Don't have an account?", linkText: "Sign up", pathname: "sign-up" },
-  },
-  "sign-up": {
-    title: "Create account",
-    subtitle: "Get started in under a minute — no credit card required.",
-    submit: "Create account",
-    footer: { text: "Already have an account?", linkText: "Log in", pathname: "sign-in" },
-  },
-};
 
 function extractErrorMessage(error: unknown): string {
-  if (error && typeof error === "object") {
-    const record = error as { message?: string; error?: { message?: string } };
-    const message = record.error?.message ?? record.message ?? "";
-    if (/failed to fetch|networkerror|name not resolved|err_name_not_resolved/i.test(message)) {
-      const hint = neonAuthConfigIssue
-        ? neonAuthConfigIssue
-        : `Current auth URL: ${neonAuthUrl || "(not set)"}. Restart \`npm run dev\` after editing frontend/.env.`;
-      return `Cannot reach Neon Auth (sign-up uses Neon, not Brevo). ${hint}`;
+  if (error instanceof Error) {
+    const msg = error.message;
+    if (/failed to fetch|networkerror|name not resolved|err_name_not_resolved/i.test(msg)) {
+      return "Cannot reach the server. Please check your connection and try again.";
     }
-    if (record.error?.message) return record.error.message;
+    return msg;
+  }
+  if (error && typeof error === "object") {
+    const record = error as { message?: string; detail?: string | { message?: string } };
+    if (typeof record.detail === "string") return record.detail;
+    if (typeof record.detail === "object" && record.detail?.message) return record.detail.message;
     if (record.message) return record.message;
   }
   return "Something went wrong. Please try again.";
@@ -86,94 +42,34 @@ function extractErrorMessage(error: unknown): string {
 
 export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
   const navigate = useNavigate();
+  const { user, isAuthenticated, isLoading, login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const signInForm = useForm<SignInValues>({
     resolver: zodResolver(signInSchema),
-    defaultValues: { email: "", password: "", rememberMe: true },
+    defaultValues: { identifier: "", password: "", rememberMe: true },
   });
 
-  const signUpForm = useForm<SignUpValues>({
-    resolver: zodResolver(signUpSchema),
-    defaultValues: { name: "", email: "", phone: "", password: "", confirmPassword: "" },
-  });
-
-  const { data: session, isPending } = authClient.useSession();
-
+  // Redirect if already authenticated
   useEffect(() => {
-    if (!isPending && session?.user) {
-      navigate({ to: resolvePostAuthPath(), replace: true });
+    if (!isLoading && isAuthenticated && user) {
+      navigate({ to: resolvePostAuthPath(user.role), replace: true });
     }
-  }, [isPending, session?.user, navigate]);
+  }, [isLoading, isAuthenticated, user, navigate]);
 
   const onSignIn = async (values: SignInValues) => {
     setSubmitting(true);
     try {
-      const result = await authClient.signIn.email({
-        email: values.email.trim(),
-        password: values.password,
-        rememberMe: values.rememberMe ?? true,
-        callbackURL: "/scan",
-      });
-
-      if (result.error) {
-        toast.error(extractErrorMessage(result.error));
-        return;
-      }
-
-      clearAuthTokenCache();
+      await login(values.identifier.trim(), values.password);
       invalidateContactsDirectory();
-      syncProfileFromAuthUser({ email: values.email.trim() });
       toast.success("Welcome back!");
-      const session = await authClient.getSession();
-      if (session.data?.user) {
-        syncProfileFromAuthUser(session.data.user);
-      }
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
   };
-
-  const onSignUp = async (values: SignUpValues) => {
-    setSubmitting(true);
-    try {
-      const result = await authClient.signUp.email({
-        name: values.name.trim(),
-        email: values.email.trim(),
-        password: values.password,
-        callbackURL: "/scan",
-      });
-
-      if (result.error) {
-        toast.error(extractErrorMessage(result.error));
-        return;
-      }
-
-      clearAuthTokenCache();
-      invalidateContactsDirectory();
-      syncProfileFromAuthUser({
-        name: values.name.trim(),
-        email: values.email.trim(),
-        phone: values.phone.trim(),
-      });
-      saveUserSettings({ phone: values.phone.trim() });
-      toast.success("Account created! You're signed in.");
-      const session = await authClient.getSession();
-      if (session.data?.user) {
-        syncProfileFromAuthUser(session.data.user);
-      }
-    } catch (error) {
-      toast.error(extractErrorMessage(error));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const content = copy[mode];
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-lg rounded-2xl bg-white px-6 py-8 shadow-sm sm:px-8 sm:py-10">
@@ -189,146 +85,63 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
 
       <div className="mb-7 space-y-1.5">
         <h1 className="font-display text-2xl font-bold tracking-tight text-[#1e3a5f] sm:text-3xl">
-          {content.title}
+          Welcome back
         </h1>
-        <p className="text-sm leading-relaxed text-muted-foreground">{content.subtitle}</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Sign in to continue scanning and syncing contacts.
+        </p>
       </div>
 
-      {mode === "sign-in" ? (
-        <form className="space-y-5" onSubmit={signInForm.handleSubmit(onSignIn)} noValidate>
-          <AuthField
-            label="Email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@company.com"
-            error={signInForm.formState.errors.email?.message}
-            {...signInForm.register("email")}
-          />
+      <form className="space-y-5" onSubmit={signInForm.handleSubmit(onSignIn)} noValidate>
+        <AuthField
+          label="Email or Username"
+          type="text"
+          autoComplete="username"
+          placeholder="you@company.com"
+          error={signInForm.formState.errors.identifier?.message}
+          {...signInForm.register("identifier")}
+        />
 
-          <div className="relative">
-            <AuthField
-              label="Password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="current-password"
-              placeholder="••••••••"
-              error={signInForm.formState.errors.password?.message}
-              className="pr-11"
-              {...signInForm.register("password")}
+        <div className="relative">
+          <AuthField
+            label="Password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            placeholder="••••••••"
+            error={signInForm.formState.errors.password?.message}
+            className="pr-11"
+            {...signInForm.register("password")}
+          />
+          <button
+            type="button"
+            className="absolute right-3 top-[2.125rem] text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <label className="flex cursor-pointer items-center gap-2 text-muted-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border accent-primary"
+              {...signInForm.register("rememberMe")}
             />
-            <button
-              type="button"
-              className="absolute right-3 top-[2.125rem] text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <label className="flex cursor-pointer items-center gap-2 text-muted-foreground">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-border accent-primary"
-                {...signInForm.register("rememberMe")}
-              />
-              Remember me
-            </label>
-            <Link
-              to="/auth/$pathname"
-              params={{ pathname: "forgot-password" }}
-              className="font-medium text-primary transition-colors hover:text-primary/80"
-            >
-              Forgot password?
-            </Link>
-          </div>
-
-          <SubmitButton loading={submitting} label={content.submit} />
-        </form>
-      ) : null}
-
-      {mode === "sign-up" ? (
-        <form className="space-y-4" onSubmit={signUpForm.handleSubmit(onSignUp)} noValidate>
-          <AuthField
-            label="Full name"
-            autoComplete="name"
-            placeholder="Jane Smith"
-            error={signUpForm.formState.errors.name?.message}
-            {...signUpForm.register("name")}
-          />
-          <AuthField
-            label="Email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@company.com"
-            error={signUpForm.formState.errors.email?.message}
-            {...signUpForm.register("email")}
-          />
-          <AuthField
-            label="Phone number"
-            type="tel"
-            autoComplete="tel"
-            placeholder="+91 98765 43210"
-            error={signUpForm.formState.errors.phone?.message}
-            {...signUpForm.register("phone")}
-          />
-
-          <div className="relative">
-            <AuthField
-              label="Password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
-              placeholder="At least 8 characters"
-              error={signUpForm.formState.errors.password?.message}
-              className="pr-11"
-              {...signUpForm.register("password")}
-            />
-            <button
-              type="button"
-              className="absolute right-3 top-[2.125rem] text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-
-          <div className="relative">
-            <AuthField
-              label="Confirm password"
-              type={showConfirm ? "text" : "password"}
-              autoComplete="new-password"
-              placeholder="Repeat password"
-              error={signUpForm.formState.errors.confirmPassword?.message}
-              className="pr-11"
-              {...signUpForm.register("confirmPassword")}
-            />
-            <button
-              type="button"
-              className="absolute right-3 top-[2.125rem] text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setShowConfirm((v) => !v)}
-              aria-label={showConfirm ? "Hide password" : "Show password"}
-            >
-              {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-
-          <SubmitButton loading={submitting} label={content.submit} />
-        </form>
-      ) : null}
-
-      {content.footer ? (
-        <p className="mt-7 text-center text-sm text-muted-foreground">
-          {content.footer.text}{" "}
+            Remember me
+          </label>
           <Link
             to="/auth/$pathname"
-            params={{ pathname: content.footer.pathname }}
-            className="font-semibold text-primary transition-colors hover:text-primary/80"
+            params={{ pathname: "forgot-password" }}
+            className="font-medium text-primary transition-colors hover:text-primary/80"
           >
-            {content.footer.linkText}
+            Forgot password?
           </Link>
-        </p>
-      ) : null}
+        </div>
+
+        <SubmitButton loading={submitting} label="Log in" />
+      </form>
     </div>
   );
 }

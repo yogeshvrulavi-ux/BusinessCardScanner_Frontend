@@ -40,7 +40,6 @@ import {
   saveContact,
   updateContact,
   storageLabel,
-  syncContactToZohoStorage,
 } from "@/lib/contactStorage";
 import { checkForDuplicates, type DuplicateMatch } from "@/lib/duplicateDetection";
 import { notifyOutreachAfterSync } from "@/lib/outreachFeedback";
@@ -382,27 +381,7 @@ export const ReviewPage = () => {
         await updateContact(existingId, updatePayload);
 
         if (!isOfflineMode() && navigator.onLine) {
-          const settingsSnapshot = loadUserSettings();
-          const skip = {
-            skipWhatsApp: outreachSkipWhatsApp(settingsSnapshot),
-            skipEmail:
-              !settingsSnapshot.emailNotificationsEnabled ||
-              !pickPrimaryEmail(updatePayload),
-          };
-          try {
-            const zohoResult = await syncContactToZohoStorage(
-              existingId,
-              skip,
-              updatePayload,
-            );
-            if (zohoResult.zohoLeadId) {
-              notifyOutreachAfterSync(settingsSnapshot, zohoResult);
-            }
-          } catch (zohoErr: unknown) {
-            const msg =
-              zohoErr instanceof Error ? zohoErr.message : "Zoho sync failed";
-            error(`Zoho sync failed: ${msg}. Use Sync to Zoho on Contacts.`);
-          }
+          // Backend handles CRM sync transparently
         }
       } else {
         const settingsSnapshot = loadUserSettings();
@@ -416,30 +395,26 @@ export const ReviewPage = () => {
         contactId = saved.id;
 
         if (saved.queued) {
-          info("Saved to queue. Will sync to Zoho CRM automatically when you're online.");
+          info("Saved to queue. Will sync to database automatically when you're online.");
           sessionStorage.removeItem("latestScanResult");
           navigate({ to: "/queue" });
           return;
         }
 
-        const zohoDoneOnSave =
-          Boolean(saved.zohoSynced) || Boolean(saved.zohoLeadId) || Boolean(saved.zohoError);
+        const syncDoneOnSave =
+          Boolean(saved.id) || Boolean(saved.error);
 
-        if (zohoDoneOnSave) {
-          if (saved.zohoError) {
+        if (syncDoneOnSave) {
+          if (saved.error) {
             success(`Saved to ${label}.`);
-            error(`Zoho sync failed: ${saved.zohoError}. Use Sync to Zoho on Contacts.`);
-          } else if (saved.alreadySynced) {
-            success("Saved — contact is already in Zoho CRM.");
-            notifyOutreachAfterSync(settingsSnapshot, saved);
+            error(`Sync failed: ${saved.error}. Use Sync on Contacts.`);
           } else {
-            success("Saved and synced to Zoho CRM.");
-            notifyOutreachAfterSync(settingsSnapshot, saved);
+            success("Saved and synced to database.");
           }
         } else if (saved.queued) {
-          info("Zoho sync failed — contact queued on device. Retry when online.");
+          info("Sync failed — contact queued on device. Retry when online.");
         } else {
-          success(`Saved to ${label}. Sync to Zoho from Contacts when online.`);
+          success(`Saved to ${label}.`);
         }
 
       }
@@ -579,7 +554,7 @@ export const ReviewPage = () => {
       />
       <Navbar
         title="Review & Save Contact"
-        subtitle="Verify extracted fields, then save. In Online mode, contacts sync to Zoho automatically."
+        subtitle="Verify extracted fields, then save. In Online mode, contacts sync to the database automatically."
       />
       <AppLayout
         left={
@@ -701,7 +676,7 @@ export const ReviewPage = () => {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Notes are not filled from the card scan. Tap the mic to dictate; saved to Zoho Features below the event name.
+                    Notes are not filled from the card scan. Tap the mic to dictate; saved to the Notes field below the event name.
                   </p>
                 </div>
               </div>
@@ -799,7 +774,7 @@ export const ReviewPage = () => {
             ))}
 
             <p className="mb-1 mt-2 text-xs text-muted-foreground">
-              Save syncs to Zoho CRM when online. Event name and notes are stored in Zoho Features.
+              Save syncs to the database when online. Event name and notes are stored in the contact record.
             </p>
             <FormActions
               onReset={() => {
