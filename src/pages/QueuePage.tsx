@@ -47,7 +47,7 @@ function queueItemName(item: QueueItem): string {
 }
 
 function isSavedOnDevice(contact: StoredContact): boolean {
-  return contact.syncStatus === "synced" || contact.syncStatus === "synced_zoho";
+  return contact.syncStatus === "synced";
 }
 
 export function QueuePage() {
@@ -205,7 +205,7 @@ export function QueuePage() {
       savesThisWeek: snapshot.savesThisWeek,
       queuedOffline: captureStats.queuedOffline,
       syncedFromQueue: captureStats.syncedFromQueue,
-      directToZoho: captureStats.directToZoho,
+      directToDatabase: captureStats.directToDatabase,
     };
   }, [queueItems, contacts, captureStats]);
 
@@ -230,8 +230,8 @@ export function QueuePage() {
         tone: "text-primary",
       },
       {
-        label: "Direct to Zoho",
-        value: stats.directToZoho,
+        label: "Direct to database",
+        value: stats.directToDatabase,
         icon: Cloud,
         tone: "text-success",
       },
@@ -337,7 +337,7 @@ export function QueuePage() {
           <div className="space-y-5 sm:space-y-6">
             <p className="text-xs text-muted-foreground">
               Offline saves are stored in IndexedDB (<span className="font-medium">source: queue</span> in
-              Contacts). Online saves go straight to Zoho (<span className="font-medium">source: zoho</span>) and
+              Contacts). Online saves go straight to the database (<span className="font-medium">source: online</span>) and
               never enter the queue. Counters below track how each path was used on this device.
             </p>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6 lg:gap-4">

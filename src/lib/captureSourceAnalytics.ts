@@ -1,8 +1,8 @@
-/** Local counters: offline IndexedDB queue vs online direct Zoho saves (this device). */
+/** Local counters: offline IndexedDB queue vs online direct database saves (this device). */
 export type CaptureSourceStats = {
   queuedOffline: number;
   syncedFromQueue: number;
-  directToZoho: number;
+  directToDatabase: number;
 };
 
 const STORAGE_KEY = "cs-capture-source-stats";
@@ -10,7 +10,7 @@ const STORAGE_KEY = "cs-capture-source-stats";
 const EMPTY: CaptureSourceStats = {
   queuedOffline: 0,
   syncedFromQueue: 0,
-  directToZoho: 0,
+  directToDatabase: 0,
 };
 
 export function loadCaptureSourceStats(): CaptureSourceStats {
@@ -22,7 +22,7 @@ export function loadCaptureSourceStats(): CaptureSourceStats {
     return {
       queuedOffline: Math.max(0, Number(parsed.queuedOffline) || 0),
       syncedFromQueue: Math.max(0, Number(parsed.syncedFromQueue) || 0),
-      directToZoho: Math.max(0, Number(parsed.directToZoho) || 0),
+      directToDatabase: Math.max(0, Number(parsed.directToDatabase) || 0),
     };
   } catch {
     return { ...EMPTY };
@@ -45,10 +45,10 @@ export function recordOfflineQueueCapture(): void {
   bump("queuedOffline");
 }
 
-export function recordDirectZohoCapture(): void {
-  bump("directToZoho");
+export function recordDirectDatabaseCapture(): void {
+  bump("directToDatabase");
 }
 
-export function recordQueueSyncedToZoho(): void {
+export function recordQueueSyncedToDatabase(): void {
   bump("syncedFromQueue");
 }

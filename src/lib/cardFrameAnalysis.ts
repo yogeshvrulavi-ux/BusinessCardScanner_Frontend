@@ -50,7 +50,7 @@ export function measureFrameSharpness(
   return sumSq / count - mean * mean;
 }
 
-/** Otsu threshold for binarizing card text (improves Tesseract on glossy cards). */
+/** Otsu threshold for binarizing card text (improves OCR on glossy cards). */
 function otsuThreshold(histogram: Uint32Array, totalPixels: number): number {
   let sum = 0;
   for (let i = 0; i < 256; i++) sum += i * histogram[i];
@@ -107,7 +107,7 @@ export function preprocessForOCR(canvas: HTMLCanvasElement): ImageData {
     data[o + 2] = binary;
   }
 
-  // Unsharp mask on binarized image — crispens letter edges for Tesseract.
+  // Unsharp mask on binarized image — crispens letter edges for OCR.
   const copy = new Uint8ClampedArray(data);
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
@@ -361,7 +361,7 @@ export async function requestCameraStream(
   }
 
   if (!window.isSecureContext) {
-    throw new Error("Camera requires HTTPS or localhost. Open the app at http://localhost:5173");
+    throw new Error("Camera requires HTTPS or localhost. Open the app via your configured FRONTEND_BASE_URL.");
   }
 
   const facing = preferredFacing ?? pickDefaultFacingMode();

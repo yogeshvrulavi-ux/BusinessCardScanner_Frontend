@@ -51,11 +51,7 @@ export type PaginatedResponse<T> = {
 export type CreateCompanyData = {
   company_name: string;
   company_code: string;
-  admin_first_name?: string;
-  admin_last_name?: string;
   admin_email: string;
-  admin_username: string;
-  admin_password: string;
   address?: string;
   phone?: string;
   email?: string;
@@ -71,15 +67,37 @@ export type UpdateCompanyData = {
   status?: string;
 };
 
-export type CreateUserData = {
-  first_name: string;
-  last_name: string;
+export type InviteUserData = {
   email: string;
-  username: string;
-  password: string;
-  role: string;
+  role: "ADMIN" | "USER";
   company_id?: string | null;
-  phone?: string;
+  company_name?: string;
+  company_code?: string;
+  company_address?: string;
+  company_phone?: string;
+  company_email?: string;
+  company_website?: string;
+};
+
+export type Invitation = {
+  id: string;
+  email: string;
+  role: string;
+  company_id: string | null;
+  company_name: string;
+  company_code: string;
+  company_address?: string;
+  company_phone?: string;
+  company_email?: string;
+  company_website?: string;
+  invited_by: string;
+  status: string;
+  expires_at: string;
+  used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+  updated_at: string;
+  inviter_name?: string;
 };
 
 export type UpdateUserData = {
@@ -122,10 +140,12 @@ export async function fetchCompanies(
 }
 
 export async function createCompany(data: CreateCompanyData) {
-  return apiJson<{ success: boolean; company: Company; admin: { id: string; email: string } }>(
-    "/api/companies",
-    { method: "POST", body: JSON.stringify(data) },
-  );
+  return apiJson<{
+    success: boolean;
+    detail: string;
+    invitation: Invitation;
+    company: { company_name: string; company_code: string; pending: boolean };
+  }>("/api/companies", { method: "POST", body: JSON.stringify(data) });
 }
 
 export async function updateCompany(id: string, data: UpdateCompanyData) {
@@ -150,13 +170,6 @@ export async function fetchUsers(
   limit = 50,
 ): Promise<PaginatedResponse<User>> {
   return apiJson(`/api/users?page=${page}&limit=${limit}`);
-}
-
-export async function createUser(data: CreateUserData) {
-  return apiJson<{ success: boolean; user: User }>("/api/users", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
 }
 
 export async function updateUser(id: string, data: UpdateUserData) {
@@ -184,4 +197,101 @@ export async function adminResetPassword(id: string, new_password: string) {
     method: "POST",
     body: JSON.stringify({ new_password }),
   });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Invitations                                                        */
+/* ------------------------------------------------------------------ */
+
+export async function fetchInvitations(status?: string) {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  return apiJson<{ items: Invitation[]; total: number }>(`/api/invitations${qs}`);
+}
+
+export async function sendInvitation(data: InviteUserData) {
+  return apiJson<Invitation>("/api/invitations", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function resendInvitation(id: string) {
+  return apiJson<{ success: boolean; detail: string }>(`/api/invitations/${id}/resend`, {
+    method: "POST",
+  });
+}
+
+export async function revokeInvitation(id: string) {
+  return apiJson<{ success: boolean; detail: string }>(`/api/invitations/${id}/revoke`, {
+    method: "POST",
+  });
+}
+
+export async function validateInvitationToken(token: string) {
+  const res = await fetch(`${API_BASE_URL}/api/invitations/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = body?.detail?.message ?? body?.detail ?? `Request failed (${res.status})`;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return res.json() as Promise<{
+    valid: boolean;
+    email: string;
+    role: string;
+    company_id: string | null;
+    company_name: string;
+    company_code: string;
+    company_address: string;
+    company_phone: string;
+    company_email: string;
+    company_website: string;
+    needs_company: boolean;
+    expires_at: string;
+  }>;
+}
+
+export async function acceptInvitation(data: {
+  token: string;
+  first_name: string;
+  last_name: string;
+  password: string;
+  confirm_password: string;
+  phone?: string;
+  username?: string;
+  company_name?: string;
+  company_code?: string;
+  company_address?: string;
+  company_phone?: string;
+  company_email?: string;
+  company_website?: string;
+}) {
+  const res = await fetch(`${API_BASE_URL}/api/invitations/accept`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = body?.detail?.message ?? body?.detail ?? `Request failed (${res.status})`;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return res.json() as Promise<{
+    success: boolean;
+    detail: string;
+    user: {
+      id: string;
+      email: string;
+      first_name: string;
+      last_name: string;
+      phone: string;
+      username: string;
+      role: string;
+      company_id: string | null;
+      company_name: string;
+    };
+  }>;
 }

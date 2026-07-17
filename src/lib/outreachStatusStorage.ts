@@ -1,4 +1,4 @@
-import type { ZohoSyncResult } from "@/lib/contactApi";
+import type { SyncResult } from "@/lib/contactApi";
 import {
   getCurrentAppUser,
   getUserScopeKeys,
@@ -20,7 +20,6 @@ export type OutreachDeliveryRecord = {
 };
 
 export type OutreachStatusEntry = {
-  zohoLeadId?: string | null;
   email?: string;
   phone?: string;
   name?: string;
@@ -33,20 +32,17 @@ const STORAGE_KEY = "cs-outreach-status-v2";
 type OutreachStore = Record<string, OutreachStatusEntry>;
 type ScopedOutreachStorage = Record<string, OutreachStore>;
 
+export type OutreachContactRef = {
+  email?: string | null;
+  phone?: string | null;
+  name?: string | null;
+};
+
 function normalizePart(value: string | null | undefined): string {
   return String(value || "").trim().toLowerCase();
 }
 
-export function outreachContactKey(input: {
-  zohoLeadId?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  name?: string | null;
-}): string {
-  const zohoId = String(input.zohoLeadId || "").trim();
-  if (zohoId && !zohoId.startsWith("zoho-")) {
-    return `zoho:${zohoId}`;
-  }
+export function outreachContactKey(input: OutreachContactRef): string {
   const email = normalizePart(input.email);
   const phone = normalizePart(input.phone);
   const name = normalizePart(input.name);
@@ -102,32 +98,14 @@ function writeStore(scope: string, store: OutreachStore): void {
 
 function lookupEntry(
   store: OutreachStore,
-  contact: {
-    zohoLeadId?: string | null;
-    email?: string | null;
-    phone?: string | null;
-    name?: string | null;
-  },
+  contact: OutreachContactRef,
 ): OutreachStatusEntry | undefined {
   const key = outreachContactKey(contact);
-  if (store[key]) return store[key];
-
-  const zohoId = String(contact.zohoLeadId || "").trim();
-  if (zohoId) {
-    const byZoho = store[`zoho:${zohoId}`];
-    if (byZoho) return byZoho;
-  }
-
-  return undefined;
+  return store[key];
 }
 
 function findEntryForUser(
-  contact: {
-    zohoLeadId?: string | null;
-    email?: string | null;
-    phone?: string | null;
-    name?: string | null;
-  },
+  contact: OutreachContactRef,
   appUser: AppUserIdentity | null,
 ): OutreachStatusEntry | undefined {
   for (const scope of getUserScopeKeys(appUser)) {
@@ -191,14 +169,9 @@ function buildDeliveryRecord(input: {
 }
 
 export async function recordOutreachFromSyncResult(
-  contact: {
-    zohoLeadId?: string | null;
-    email?: string | null;
-    phone?: string | null;
-    name?: string | null;
-  },
+  contact: OutreachContactRef,
   result: Pick<
-    ZohoSyncResult,
+    SyncResult,
     | "emailSent"
     | "emailAttempted"
     | "emailError"
@@ -232,7 +205,6 @@ export async function recordOutreachFromSyncResult(
   });
 
   const entry: OutreachStatusEntry = {
-    zohoLeadId: contact.zohoLeadId,
     email: contact.email || undefined,
     phone: contact.phone || undefined,
     name: contact.name || undefined,
@@ -241,26 +213,16 @@ export async function recordOutreachFromSyncResult(
   };
 
   const contactKey = outreachContactKey(contact);
-  const zohoId = String(contact.zohoLeadId || "").trim();
-  const zohoKey = zohoId ? `zoho:${zohoId}` : null;
 
   for (const scope of getUserScopeKeys(appUser)) {
     const store = readStore(scope);
     store[contactKey] = { ...(store[contactKey] || {}), ...entry };
-    if (zohoKey) {
-      store[zohoKey] = { ...(store[zohoKey] || {}), ...entry };
-    }
     writeStore(scope, store);
   }
 }
 
 export function getOutreachStatusForContactSync(
-  contact: {
-    zohoLeadId?: string | null;
-    email?: string | null;
-    phone?: string | null;
-    name?: string | null;
-  },
+  contact: OutreachContactRef,
   appUser: AppUserIdentity | null,
 ): Pick<OutreachStatusEntry, "emailDelivery" | "whatsappDelivery"> {
   const entry = findEntryForUser(contact, appUser);
@@ -272,31 +234,17 @@ export function getOutreachStatusForContactSync(
 }
 
 export function removeOutreachStatusForContact(
-  contact: {
-    zohoLeadId?: string | null;
-    email?: string | null;
-    phone?: string | null;
-    name?: string | null;
-  },
+  contact: OutreachContactRef,
   appUser: AppUserIdentity | null,
 ): void {
   const key = outreachContactKey(contact);
-  const zohoKey = contact.zohoLeadId
-    ? `zoho:${String(contact.zohoLeadId).trim()}`
-    : null;
 
   for (const scope of getUserScopeKeys(appUser)) {
     const store = readStore(scope);
-    let changed = false;
     if (store[key]) {
       delete store[key];
-      changed = true;
+      writeStore(scope, store);
     }
-    if (zohoKey && store[zohoKey]) {
-      delete store[zohoKey];
-      changed = true;
-    }
-    if (changed) writeStore(scope, store);
   }
 }
 

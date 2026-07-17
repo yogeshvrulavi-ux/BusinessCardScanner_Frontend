@@ -153,9 +153,8 @@ function contactRecordFromPayload(
   const now = new Date().toISOString();
   const fullName = String(payload.fullName || payload.name || "").trim();
   const syncStatus = String(payload.syncStatus || "local_only");
-  const zohoLeadId = payload.zohoLeadId as string | null | undefined;
   const status =
-    syncStatus === "synced_zoho" || syncStatus === "synced" || zohoLeadId
+    syncStatus === "synced"
       ? "synced"
       : syncStatus === "failed"
         ? "failed"
@@ -184,7 +183,6 @@ function contactRecordFromPayload(
     eventId: String(payload.eventId || ""),
     cardImageBase64: cardImageBase64 ?? payload.cardImageBase64,
     syncStatus,
-    zohoLeadId: zohoLeadId ?? null,
     source: "indexeddb",
     status,
     created_at: String(payload.created_at || now),
@@ -250,7 +248,6 @@ export async function deleteStoredContact(contactId: string): Promise<void> {
 export async function patchStoredContactSyncStatus(
   contactId: string,
   syncStatus: string,
-  zohoLeadId?: string,
 ): Promise<void> {
   const existing = await getStoredContactById(contactId);
   if (!existing) {
@@ -259,6 +256,5 @@ export async function patchStoredContactSyncStatus(
   await updateStoredContact(contactId, {
     ...existing,
     syncStatus,
-    zohoLeadId: zohoLeadId ?? existing.zohoLeadId,
   });
 }

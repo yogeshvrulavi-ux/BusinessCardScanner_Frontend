@@ -1,6 +1,6 @@
 export type LegalSection = { heading: string; body: string };
 
-/** Public static pages on Netlify (also used for Meta / business verification URLs). */
+/** Public static legal pages (served from the app origin). */
 export const LEGAL_PAGE_URLS = {
   privacy: "/privacy-policy.html",
   terms: "/terms-and-conditions.html",
@@ -22,7 +22,7 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
   {
     heading: "How we use information",
     body:
-      "This information is used to extract contact details, save contacts to CRM systems such as Zoho CRM, and send communications through services such as WhatsApp.",
+      "This information is used to extract contact details, save contacts to the database, and send communications through services such as WhatsApp."
   },
   {
     heading: "No sale of personal data",
@@ -47,7 +47,7 @@ export const TERMS_AND_CONDITIONS_SECTIONS: LegalSection[] = [
   {
     heading: "Service description",
     body:
-      "CardSync AI lets you scan business cards, extract contact details, save leads to Zoho CRM, and send follow-up communications through email and WhatsApp.",
+      "CardSync AI lets you scan business cards, extract contact details, save leads to the database, and send follow-up communications through email and WhatsApp."
   },
   {
     heading: "Your responsibilities",

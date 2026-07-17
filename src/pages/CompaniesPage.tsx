@@ -119,7 +119,7 @@ function CompaniesPageInner() {
               className="h-10 rounded-xl bg-gradient-primary"
             >
               <Plus className="mr-2 h-4 w-4" />
-              Create Company
+              Invite Admin
             </Button>
           </div>
         }
@@ -137,14 +137,14 @@ function CompaniesPageInner() {
               </div>
               <h3 className="mt-4 font-display text-lg font-semibold">No companies yet</h3>
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                Create your first company to get started. Each company comes with its own admin user.
+                Invite a company Admin by email. They set their own password when they register.
               </p>
               <Button
                 className="mt-5 rounded-xl bg-gradient-primary"
                 onClick={() => setCreateOpen(true)}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                Create Company
+                Invite Admin
               </Button>
             </div>
           ) : (

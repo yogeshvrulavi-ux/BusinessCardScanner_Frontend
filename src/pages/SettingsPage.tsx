@@ -312,15 +312,15 @@ export function SettingsPage() {
               icon={<Wifi className="h-4 w-4" />}
               title="Auto-sync to database when online"
               description="When back online, sync the offline queue to the database and send email follow-ups"
-              checked={profile.autoSyncToZohoWhenOnline}
+              checked={profile.autoSyncQueueWhenOnline}
               onCheckedChange={(v) => {
                 persistToggle(
-                  "autoSyncToZohoWhenOnline",
+                  "autoSyncQueueWhenOnline",
                   v,
-                  v ? "Auto-sync to Zoho enabled." : "Auto-sync to Zoho disabled.",
+                  v ? "Auto-sync to database enabled." : "Auto-sync to database disabled.",
                 );
                 if (v && typeof navigator !== "undefined" && navigator.onLine) {
-                  void import("@/lib/autoZohoSync").then(({ maybeAutoSyncWhenOnline }) =>
+                  void import("@/lib/autoSync").then(({ maybeAutoSyncWhenOnline }) =>
                     maybeAutoSyncWhenOnline().then((summary) => {
                       if (summary.ran && summary.queueSynced > 0) {
                         toast.success("Pending contacts synced to database.");

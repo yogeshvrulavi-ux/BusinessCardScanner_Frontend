@@ -164,7 +164,7 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
             .toUpperCase()
         : "";
       const status =
-        c.syncStatus === "synced_zoho" || c.syncStatus === "synced"
+        c.syncStatus === "synced"
           ? ("synced" as ContactStatus)
           : c.syncStatus === "failed"
             ? ("failed" as ContactStatus)

@@ -1,6 +1,6 @@
 import type { LeadPayload } from "@/lib/cardImage";
 
-/** Primary email for Zoho sync / thank-you outreach (form + queue field names). */
+/** Primary email for contact sync / thank-you outreach (form + queue field names). */
 export function pickPrimaryEmail(
   payload: LeadPayload | Record<string, unknown>,
 ): string {

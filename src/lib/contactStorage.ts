@@ -150,8 +150,8 @@ async function saveOnlineToPostgres(
         phone: body.phone,
       });
     }
-    const { recordDirectZohoCapture } = await import("@/lib/captureSourceAnalytics");
-    recordDirectZohoCapture();
+    const { recordDirectDatabaseCapture } = await import("@/lib/captureSourceAnalytics");
+    recordDirectDatabaseCapture();
     await persistOutreachStatus(body, result);
     notifyContactsListChanged();
     return {
@@ -191,8 +191,8 @@ export async function syncQueueItem(
   }
   await removeQueueItem(item.id);
   await persistOutreachStatus(payload, result);
-  const { recordQueueSyncedToZoho } = await import("@/lib/captureSourceAnalytics");
-  recordQueueSyncedToZoho();
+  const { recordQueueSyncedToDatabase } = await import("@/lib/captureSourceAnalytics");
+  recordQueueSyncedToDatabase();
   notifyContactsListChanged();
   return {
     id: result.id,
@@ -275,7 +275,7 @@ export async function deleteContact(contactId: string): Promise<void> {
 export async function markContactSynced(
   contactId: string,
 ): Promise<void> {
-  await patchStoredContactSyncStatus(contactId, "synced", undefined);
+  await patchStoredContactSyncStatus(contactId, "synced");
 }
 
 export type AutoSyncResult = {

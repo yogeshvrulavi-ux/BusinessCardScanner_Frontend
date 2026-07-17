@@ -1,0 +1,29 @@
+# Dependencies & build output
+node_modules/
+dist/
+.build/
+.output/
+.wrangler/
+.vercel/
+.turbo/
+.cache/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+*credentials*.json
+*.pem
+*.key
+
+# Logs & OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Coverage / test artifacts
+coverage/
+.nyc_output/

@@ -27,7 +27,7 @@ function countContactsForEvent(contacts: DirectoryContact[], eventName: string) 
   };
 }
 
-/** Build event folders from contacts (Zoho + queue + local). Stored names merge metadata only. */
+/** Build event folders from contacts (database + queue + local). Stored names merge metadata only. */
 export function buildEventFolderStats(
   contacts: DirectoryContact[],
   events?: StoredEvent[],

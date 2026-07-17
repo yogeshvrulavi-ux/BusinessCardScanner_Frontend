@@ -47,7 +47,7 @@ export const EventNameCombobox = forwardRef<HTMLInputElement, EventNameComboboxP
         </datalist>
       ) : null}
       <p className="text-xs text-muted-foreground">
-        Optional. When set, saved to Zoho Features as Event name. Events page groups leads by this event.
+        Optional. When set, saved to the contact's event field. Events page groups leads by this event.
       </p>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>

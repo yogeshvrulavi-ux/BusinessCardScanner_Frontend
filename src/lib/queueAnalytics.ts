@@ -8,7 +8,7 @@ const WEEK_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
 function isSavedContact(contact: StoredContact): boolean {
-  return contact.syncStatus === "synced" || contact.syncStatus === "synced_zoho";
+  return contact.syncStatus === "synced";
 }
 
 function collectSaveDates(

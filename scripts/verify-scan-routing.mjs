@@ -29,12 +29,12 @@ for (const [label, needle] of checks) {
   if (!ok) failed += 1;
 }
 
-const tessPath = join(root, "public", "tessdata", "eng.traineddata");
+const paddlePath = join(root, "node_modules", "@paddleocr", "paddleocr-js");
 try {
-  const size = readFileSync(tessPath).length;
-  console.log(`OK  Browser tessdata (${(size / 1e6).toFixed(1)} MB)`);
+  readFileSync(join(paddlePath, "package.json"));
+  console.log("OK  PaddleOCR package installed");
 } catch {
-  console.log("FAIL  public/tessdata/eng.traineddata missing");
+  console.log("FAIL  @paddleocr/paddleocr-js not installed — run npm install");
   failed += 1;
 }
 

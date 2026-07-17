@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Mail } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,11 +23,7 @@ type Props = {
 const EMPTY: CreateCompanyData = {
   company_name: "",
   company_code: "",
-  admin_first_name: "",
-  admin_last_name: "",
   admin_email: "",
-  admin_username: "",
-  admin_password: "",
   address: "",
   phone: "",
   email: "",
@@ -47,20 +43,22 @@ export function CreateCompanyModal({ open, onOpenChange, onSuccess }: Props) {
       toast.error("Company name and code are required.");
       return;
     }
-    if (!form.admin_email.trim() || !form.admin_username.trim() || !form.admin_password) {
-      toast.error("Admin email, username, and password are required.");
+    if (!form.admin_email.trim()) {
+      toast.error("Admin email is required.");
       return;
     }
 
     setIsSubmitting(true);
     try {
       await createCompany(form);
-      toast.success(`Company "${form.company_name}" and admin user created.`);
+      toast.success(
+        `Invitation sent to ${form.admin_email}. They must register before login. Company is created when they submit.`,
+      );
       setForm({ ...EMPTY });
       onOpenChange(false);
       onSuccess();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create company.");
+      toast.error(err instanceof Error ? err.message : "Failed to send invitation.");
     } finally {
       setIsSubmitting(false);
     }
@@ -70,14 +68,14 @@ export function CreateCompanyModal({ open, onOpenChange, onSuccess }: Props) {
     <Dialog open={open} onOpenChange={(v) => { if (!v) setForm({ ...EMPTY }); onOpenChange(v); }}>
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto rounded-2xl">
         <DialogHeader>
-          <DialogTitle>Create Company</DialogTitle>
+          <DialogTitle>Invite company Admin</DialogTitle>
           <DialogDescription>
-            Create a new company and its admin user in a single step.
+            Assign organization details and the Admin&apos;s email only. Do not set a password —
+            they complete registration from the invitation link before they can log in.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Company details */}
           <div className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Company</p>
             <div className="grid grid-cols-2 gap-3">
@@ -111,7 +109,7 @@ export function CreateCompanyModal({ open, onOpenChange, onSuccess }: Props) {
                 />
               </div>
               <div>
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Company Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -120,7 +118,7 @@ export function CreateCompanyModal({ open, onOpenChange, onSuccess }: Props) {
                   placeholder="info@acme.com"
                 />
               </div>
-              <div>
+              <div className="col-span-2">
                 <Label htmlFor="website">Website</Label>
                 <Input
                   id="website"
@@ -141,80 +139,35 @@ export function CreateCompanyModal({ open, onOpenChange, onSuccess }: Props) {
             </div>
           </div>
 
-          {/* Admin user details */}
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Admin User</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="admin_first_name">First Name</Label>
-                <Input
-                  id="admin_first_name"
-                  value={form.admin_first_name ?? ""}
-                  onChange={(e) => set("admin_first_name", e.target.value)}
-                  placeholder="John"
-                />
-              </div>
-              <div>
-                <Label htmlFor="admin_last_name">Last Name</Label>
-                <Input
-                  id="admin_last_name"
-                  value={form.admin_last_name ?? ""}
-                  onChange={(e) => set("admin_last_name", e.target.value)}
-                  placeholder="Doe"
-                />
-              </div>
-              <div className="col-span-2">
-                <Label htmlFor="admin_email">Admin Email *</Label>
-                <Input
-                  id="admin_email"
-                  type="email"
-                  value={form.admin_email}
-                  onChange={(e) => set("admin_email", e.target.value)}
-                  placeholder="admin@acme.com"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="admin_username">Username *</Label>
-                <Input
-                  id="admin_username"
-                  value={form.admin_username}
-                  onChange={(e) => set("admin_username", e.target.value)}
-                  placeholder="admin_acme"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="admin_password">Password *</Label>
-                <Input
-                  id="admin_password"
-                  type="password"
-                  value={form.admin_password}
-                  onChange={(e) => set("admin_password", e.target.value)}
-                  placeholder="Min 8 characters"
-                  required
-                  minLength={8}
-                />
-              </div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Admin invitation</p>
+            <div>
+              <Label htmlFor="admin_email">Admin Email *</Label>
+              <Input
+                id="admin_email"
+                type="email"
+                value={form.admin_email}
+                onChange={(e) => set("admin_email", e.target.value)}
+                placeholder="admin@acme.com"
+                required
+              />
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                No password is set here — the Admin creates their own account from the invite email.
+              </p>
             </div>
           </div>
 
-          <DialogFooter className="gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => { setForm({ ...EMPTY }); onOpenChange(false); }}
-              disabled={isSubmitting}
-            >
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting} className="bg-gradient-primary">
               {isSubmitting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <Plus className="mr-2 h-4 w-4" />
+                <Mail className="mr-2 h-4 w-4" />
               )}
-              Create Company
+              Send Admin invitation
             </Button>
           </DialogFooter>
         </form>

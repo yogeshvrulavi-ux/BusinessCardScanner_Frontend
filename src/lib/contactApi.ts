@@ -90,7 +90,7 @@ export async function seedOfflineSampleContact(): Promise<{
  * The backend transparently handles any CRM sync if configured.
  */
 export async function saveContactToBackend(
-  payload: LeadPayload & { zohoLeadId?: string | null },
+  payload: LeadPayload,
   options?: {
     connectionMode?: "online" | "offline";
     skipWhatsApp?: boolean;

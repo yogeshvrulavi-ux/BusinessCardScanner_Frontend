@@ -3,13 +3,8 @@ import type { LeadPayload } from "@/lib/cardImage";
 import type { QueueItem } from "@/lib/indexeddb";
 import { API_BASE_URL } from "@/lib/api";
 import { apiFetch } from "@/lib/apiFetch";
-import {
-  syncAllPendingContactsToZoho,
-  syncContactToZoho,
-  syncPayloadToZoho,
-} from "@/lib/contactApi";
 
-/** Python FastAPI — PostgreSQL/Firebase storage is behind this API. */
+/** Python FastAPI — PostgreSQL storage is behind this API. */
 const API = API_BASE_URL;
 
 export type LocalContact = {
@@ -25,9 +20,8 @@ export type LocalContact = {
   website: string;
   address: string;
   syncStatus: string;
-  zohoLeadId?: string | null;
   status: string;
-  source: "localdb" | "indexeddb" | "firebase";
+  source: "localdb" | "indexeddb";
   created_at: string;
   lastSync: string;
 };
@@ -89,10 +83,6 @@ export async function checkLocalDbHealth(): Promise<boolean> {
 
 export type SaveContactResult = {
   id: string;
-  zohoLeadId?: string;
-  zohoSynced?: boolean;
-  alreadySynced?: boolean;
-  zohoError?: string;
   emailSent?: boolean;
   emailError?: string | null;
   emailTo?: string | null;
@@ -140,10 +130,6 @@ export async function saveContactToLocalDb(
   }
   return {
     id: data.id,
-    zohoLeadId: data.zohoLeadId,
-    zohoSynced: data.zohoSynced,
-    alreadySynced: data.alreadySynced,
-    zohoError: data.zohoError,
     emailSent: Boolean(data.email_sent ?? data.emailSent),
     emailError: data.email_error ?? data.emailError ?? null,
     emailTo: data.email_to ?? data.emailTo ?? null,
@@ -182,12 +168,9 @@ export async function listLocalContacts(): Promise<LocalContact[]> {
   return response.json() as Promise<LocalContact[]>;
 }
 
-export async function deleteLocalContact(contactId: string, deleteZoho = false): Promise<void> {
+export async function deleteLocalContact(contactId: string): Promise<void> {
   const baseUrl = API || (typeof window !== "undefined" ? window.location.origin : "");
   const url = new URL(`/api/contacts/${contactId}`, baseUrl || undefined);
-  if (deleteZoho) {
-    url.searchParams.set("deleteZoho", "true");
-  }
 
   const response = await apiFetch(url.toString(), {
     method: "DELETE",
@@ -284,39 +267,6 @@ export async function getLocalContactById(contactId: string): Promise<LocalConta
     throw new Error(`Contact not found (${response.status})`);
   }
   return response.json() as Promise<LocalContact>;
-}
-
-export async function markLocalContactSyncedZoho(
-  contactId: string,
-  zohoLeadId: string,
-): Promise<void> {
-  const response = await apiFetch(`${API}/api/contacts/${contactId}/sync-status`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ syncStatus: "synced_zoho", zohoLeadId }),
-  });
-  if (!response.ok) {
-    const data = (await response.json()) as { detail?: string; error?: string };
-    throw new Error(data.detail || data.error || `Failed to update sync status (${response.status})`);
-  }
-}
-
-export async function syncLocalContactToZoho(
-  contactId: string,
-  options?: { skipWhatsApp?: boolean; skipEmail?: boolean },
-): Promise<{ zohoLeadId?: string; alreadySynced?: boolean }> {
-  return syncContactToZoho(contactId, options);
-}
-
-export async function syncAllLocalPendingToZoho(): Promise<{
-  synced: number;
-  total: number;
-}> {
-  return syncAllPendingContactsToZoho();
-}
-
-export function isLocalContactPendingZoho(contact: LocalContact): boolean {
-  return contact.syncStatus !== "synced_zoho" && !contact.zohoLeadId;
 }
 
 export type ThankYouOutreachResult = {

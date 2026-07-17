@@ -1,4 +1,4 @@
-/** Turn FastAPI / Zoho error JSON into a single user-visible string. */
+/** Turn FastAPI / backend error JSON into a single user-visible string. */
 export function parseApiErrorDetail(body: unknown, fallback: string): string {
   if (!body || typeof body !== "object") {
     return fallback;

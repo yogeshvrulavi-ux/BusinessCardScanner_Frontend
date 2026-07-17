@@ -20,7 +20,7 @@ export function AuthScannerPanel() {
           </span>
         </h2>
         <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/60">
-          Scan at events, review on-device, and sync to Zoho — built for networking teams.
+          Scan at events, review on-device, and sync to the database — built for networking teams.
         </p>
       </div>
 
@@ -63,7 +63,7 @@ export function AuthScannerPanel() {
       </div>
 
       <div className="mt-6 flex flex-wrap justify-center gap-2 sm:justify-start">
-        {["On-device OCR", "Zoho sync", "Offline queue"].map((feature) => (
+        {["On-device OCR", "Database sync", "Offline queue"].map((feature) => (
           <span
             key={feature}
             className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] text-white/65"

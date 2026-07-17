@@ -357,6 +357,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     restore();
   }, [setAuth]);
 
+  /* ── Idle auto-logout (matches backend SESSION_TIMEOUT_MINUTES default) ─ */
+  useEffect(() => {
+    if (!state.isAuthenticated) return;
+
+    const IDLE_MS = 30 * 60 * 1000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const resetIdleTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void logout();
+      }, IDLE_MS);
+    };
+
+    const events: Array<keyof WindowEventMap> = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "touchstart",
+      "scroll",
+      "visibilitychange",
+    ];
+
+    for (const event of events) {
+      window.addEventListener(event, resetIdleTimer, { passive: true });
+    }
+    resetIdleTimer();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      for (const event of events) {
+        window.removeEventListener(event, resetIdleTimer);
+      }
+    };
+  }, [state.isAuthenticated, logout]);
+
   /* ── Context value ─────────────────────────────────────────────── */
   const value = useMemo<AuthContextValue>(
     () => ({

@@ -1,6 +1,9 @@
 import { emptyScanContact, type ScanContact } from "@/lib/scanResult";
 import { runBrowserOcr } from "@/lib/browserOcr";
 import { storeScanSession } from "@/lib/scanSession";
+import { isNetworkOnline } from "@/lib/connectionMode";
+import { apiFetch } from "@/lib/apiFetch";
+import { API_BASE_URL } from "@/lib/api";
 
 export type ScanProgress = {
   progress: number;
@@ -33,15 +36,58 @@ async function runBrowserExtraction(
   };
 }
 
-/** OCR runs in the browser only — works offline. Backend receives fields on save/sync. */
+/**
+ * Online OCR via the backend Textract endpoint (POST /api/ocr).
+ * Falls back to browser PaddleOCR on any failure (network, auth, 503, etc.).
+ */
+async function runOnlineExtraction(
+  file: File,
+  onProgress?: (update: ScanProgress) => void,
+): Promise<ScanExtractionResult> {
+  onProgress?.({ progress: 20, message: "Extracting via AWS Textract…" });
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await apiFetch(`${API_BASE_URL}/api/ocr`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend OCR returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    const rawText: string = data.rawText || "";
+    const contact: ScanContact = data.contact || emptyScanContact();
+
+    onProgress?.({ progress: 100, message: "Extraction complete" });
+
+    return { contact, rawText };
+  } catch (error) {
+    console.warn("Online OCR (Textract) failed, falling back to browser OCR:", error);
+    return runBrowserExtraction(file, onProgress);
+  }
+}
+
+/**
+ * Auto-selects OCR engine based on connectivity:
+ * - Online  → backend Textract (POST /api/ocr) with browser fallback.
+ * - Offline → browser PaddleOCR.
+ */
 export async function extractContactFromImage(
   file: File,
   onProgress?: (update: ScanProgress) => void,
 ): Promise<ScanExtractionResult> {
   try {
+    if (isNetworkOnline()) {
+      return await runOnlineExtraction(file, onProgress);
+    }
     return await runBrowserExtraction(file, onProgress);
   } catch (err) {
-    console.error("Browser OCR failed:", err);
+    console.error("OCR pipeline failed:", err);
     onProgress?.({ progress: 100, message: "Extraction failed — enter details manually" });
     return {
       contact: emptyScanContact(),

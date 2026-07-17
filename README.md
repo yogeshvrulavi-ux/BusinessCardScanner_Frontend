@@ -44,19 +44,20 @@ copy .env.example .env
 python run.py
 ```
 
-- API: http://127.0.0.1:5000  
-- Swagger: http://127.0.0.1:5000/docs  
-- Health: http://127.0.0.1:5000/health  
+- API: `{BACKEND_BASE_URL}`  
+- Swagger: `{BACKEND_BASE_URL}/docs`  
+- Health: `{BACKEND_BASE_URL}/health`  
 
 ## Run frontend + backend together
 
 ```powershell
-cd frontend
+cd BusinessCardScanner_Frontend
 npm install
-npm run dev:all
+# Set VITE_API_URL in .env
+npm run dev
 ```
 
-This starts Python on :5000 and Vite on :5173 with API proxy.
+Vite proxies API paths to `VITE_API_URL`.
 
 ## Zoho CRM
 

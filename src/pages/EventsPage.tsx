@@ -201,7 +201,7 @@ export function EventsPage() {
     setNewEventName("");
     setEventsVersion((n) => n + 1);
     setCreateSuccess(
-      `"${trimmed}" saved for Review. After you save a card, refresh Events to see the folder from Zoho.`,
+      `${trimmed} saved for Review. After you save a card, refresh Events to see the folder from the database.`,
     );
   };
 
@@ -245,7 +245,7 @@ export function EventsPage() {
         <Card className="flex items-center gap-3 rounded-2xl border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
           <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
           <span>
-            Could not load leads from Zoho. Wait a minute, then click <strong>Refresh</strong>.
+            Could not load leads from the database. Wait a minute, then click <strong>Refresh</strong>.
           </span>
         </Card>
       ) : null}
@@ -264,7 +264,7 @@ export function EventsPage() {
           <div>
             <h2 className="text-lg font-semibold">Event folders</h2>
             <p className="text-xs text-muted-foreground">
-              Folders come from Zoho Features column and pending saves. Refresh to pull latest from CRM.
+              Folders come from event tags and pending saves. Refresh to pull latest contacts.
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
@@ -311,9 +311,9 @@ export function EventsPage() {
             <p className="font-medium">No event folders yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {fetchFailed
-                ? "Zoho could not be reached. Click Refresh after a minute."
+                ? "The database could not be reached. Click Refresh after a minute."
                 : contacts.length > 0
-                  ? "Leads loaded but no event name found. In Zoho, Features should show Event: YourEventName (e.g. Event: Mall Opening)."
+                  ? "Leads loaded but no event name found. The contact's event field should show Event: YourEventName (e.g. Event: Mall Opening)."
                   : "Save a card with an event name on Review, then click Refresh."}
             </p>
           </div>

@@ -1,11 +1,11 @@
 import { toast } from "sonner";
-import type { ZohoSyncResult } from "@/lib/contactApi";
+import type { SyncResult } from "@/lib/contactApi";
 import type { UserSettings } from "@/lib/settingsStorage";
 
-/** Show thank-you email/WhatsApp result after Zoho sync (from API response body). */
+/** Show thank-you email/WhatsApp result after save/sync (from API response body). */
 export function notifyOutreachAfterSync(
   settings: UserSettings,
-  result?: ZohoSyncResult | null,
+  result?: SyncResult | null,
 ): void {
   if (!result) return;
 

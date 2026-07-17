@@ -3,16 +3,13 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
-import netlify from "@netlify/vite-plugin-tanstack-start";
 
-const apiTarget = process.env.VITE_API_URL || "http://127.0.0.1:5000";
-
-/** Netlify functions-serve breaks SSR deps (e.g. recharts → @reduxjs/toolkit) during `vite dev`. */
-const isViteDev = process.argv.includes("dev");
-const isLocalProdBuild = process.argv.some((arg) => arg.includes("development"));
-/** Disable the Netlify adapter when building for AWS Amplify (static SPA deploy). */
-const isAmplifyBuild = !!process.env.AMPLIFY;
-const enableNetlifyPlugin = !isViteDev && !isLocalProdBuild && !isAmplifyBuild;
+const apiTarget = process.env.VITE_API_URL;
+if (!apiTarget) {
+  throw new Error(
+    "VITE_API_URL is required for the Vite proxy. Set it in BusinessCardScanner_Frontend/.env",
+  );
+}
 
 export default defineConfig({
   server: {
@@ -39,7 +36,7 @@ export default defineConfig({
     include: ["framer-motion", "motion-dom", "motion-utils"],
   },
   ssr: {
-    // victory-vendor (recharts → d3-shape) is CJS; must bundle for Netlify SSR ESM loader
+    // victory-vendor (recharts → d3-shape) is CJS; must bundle for SSR ESM loader
     noExternal: [
       "echarts",
       "recharts",
@@ -51,13 +48,5 @@ export default defineConfig({
       "motion-utils",
     ],
   },
-  plugins: [
-    tsConfigPaths(),
-    tailwindcss(),
-    // Amplify has no SSR runtime here — build a prerendered SPA shell (dist/client/index.html)
-    // so the static deploy can boot. Netlify keeps full SSR via its adapter below.
-    tanstackStart(isAmplifyBuild ? { spa: { enabled: true } } : undefined),
-    ...(enableNetlifyPlugin ? [netlify()] : []),
-    react(),
-  ],
+  plugins: [tsConfigPaths(), tailwindcss(), tanstackStart(), react()],
 });

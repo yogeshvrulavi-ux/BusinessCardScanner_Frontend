@@ -14,10 +14,14 @@ import { Route as StatusRouteImport } from './routes/status'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ScanRouteImport } from './routes/scan'
 import { Route as ReviewRouteImport } from './routes/review'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as QueueRouteImport } from './routes/queue'
+import { Route as InvitationsRouteImport } from './routes/invitations'
 import { Route as EventsRouteImport } from './routes/events'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContactsRouteImport } from './routes/contacts'
 import { Route as CompaniesRouteImport } from './routes/companies'
+import { Route as AuditRouteImport } from './routes/audit'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
@@ -47,14 +51,29 @@ const ReviewRoute = ReviewRouteImport.update({
   path: '/review',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const QueueRoute = QueueRouteImport.update({
   id: '/queue',
   path: '/queue',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InvitationsRoute = InvitationsRouteImport.update({
+  id: '/invitations',
+  path: '/invitations',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EventsRoute = EventsRouteImport.update({
   id: '/events',
   path: '/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactsRoute = ContactsRouteImport.update({
@@ -65,6 +84,11 @@ const ContactsRoute = ContactsRouteImport.update({
 const CompaniesRoute = CompaniesRouteImport.update({
   id: '/companies',
   path: '/companies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditRoute = AuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
@@ -86,10 +110,14 @@ const AuthPathnameRoute = AuthPathnameRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/audit': typeof AuditRoute
   '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
+  '/dashboard': typeof DashboardRoute
   '/events': typeof EventsRoute
+  '/invitations': typeof InvitationsRoute
   '/queue': typeof QueueRoute
+  '/register': typeof RegisterRoute
   '/review': typeof ReviewRoute
   '/scan': typeof ScanRoute
   '/settings': typeof SettingsRoute
@@ -100,10 +128,14 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/audit': typeof AuditRoute
   '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
+  '/dashboard': typeof DashboardRoute
   '/events': typeof EventsRoute
+  '/invitations': typeof InvitationsRoute
   '/queue': typeof QueueRoute
+  '/register': typeof RegisterRoute
   '/review': typeof ReviewRoute
   '/scan': typeof ScanRoute
   '/settings': typeof SettingsRoute
@@ -115,10 +147,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/audit': typeof AuditRoute
   '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
+  '/dashboard': typeof DashboardRoute
   '/events': typeof EventsRoute
+  '/invitations': typeof InvitationsRoute
   '/queue': typeof QueueRoute
+  '/register': typeof RegisterRoute
   '/review': typeof ReviewRoute
   '/scan': typeof ScanRoute
   '/settings': typeof SettingsRoute
@@ -131,10 +167,14 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/analytics'
+    | '/audit'
     | '/companies'
     | '/contacts'
+    | '/dashboard'
     | '/events'
+    | '/invitations'
     | '/queue'
+    | '/register'
     | '/review'
     | '/scan'
     | '/settings'
@@ -145,10 +185,14 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/analytics'
+    | '/audit'
     | '/companies'
     | '/contacts'
+    | '/dashboard'
     | '/events'
+    | '/invitations'
     | '/queue'
+    | '/register'
     | '/review'
     | '/scan'
     | '/settings'
@@ -159,10 +203,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/analytics'
+    | '/audit'
     | '/companies'
     | '/contacts'
+    | '/dashboard'
     | '/events'
+    | '/invitations'
     | '/queue'
+    | '/register'
     | '/review'
     | '/scan'
     | '/settings'
@@ -174,10 +222,14 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  AuditRoute: typeof AuditRoute
   CompaniesRoute: typeof CompaniesRoute
   ContactsRoute: typeof ContactsRoute
+  DashboardRoute: typeof DashboardRoute
   EventsRoute: typeof EventsRoute
+  InvitationsRoute: typeof InvitationsRoute
   QueueRoute: typeof QueueRoute
+  RegisterRoute: typeof RegisterRoute
   ReviewRoute: typeof ReviewRoute
   ScanRoute: typeof ScanRoute
   SettingsRoute: typeof SettingsRoute
@@ -223,6 +275,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/queue': {
       id: '/queue'
       path: '/queue'
@@ -230,11 +289,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof QueueRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/invitations': {
+      id: '/invitations'
+      path: '/invitations'
+      fullPath: '/invitations'
+      preLoaderRoute: typeof InvitationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/events': {
       id: '/events'
       path: '/events'
       fullPath: '/events'
       preLoaderRoute: typeof EventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contacts': {
@@ -249,6 +322,13 @@ declare module '@tanstack/react-router' {
       path: '/companies'
       fullPath: '/companies'
       preLoaderRoute: typeof CompaniesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit': {
+      id: '/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analytics': {
@@ -278,10 +358,14 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
+  AuditRoute: AuditRoute,
   CompaniesRoute: CompaniesRoute,
   ContactsRoute: ContactsRoute,
+  DashboardRoute: DashboardRoute,
   EventsRoute: EventsRoute,
+  InvitationsRoute: InvitationsRoute,
   QueueRoute: QueueRoute,
+  RegisterRoute: RegisterRoute,
   ReviewRoute: ReviewRoute,
   ScanRoute: ScanRoute,
   SettingsRoute: SettingsRoute,

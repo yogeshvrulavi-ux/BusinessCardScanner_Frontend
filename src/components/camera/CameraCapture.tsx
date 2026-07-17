@@ -282,7 +282,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     }
 
     if (!window.isSecureContext) {
-      setError("Camera requires HTTPS or localhost. Open the app at http://localhost:5173");
+      setError("Camera requires HTTPS or localhost. Open the app via your configured FRONTEND_BASE_URL.");
       setIsStarting(false);
       return;
     }

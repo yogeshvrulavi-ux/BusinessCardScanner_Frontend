@@ -108,7 +108,7 @@ export function listEventNames(): string[] {
 
 const EXAMPLE_EVENT_NAME = "Mall Opening";
 
-/** Placeholder text only — not inserted into Zoho or the Events list. */
+/** Placeholder text only — not inserted into the database or the Events list. */
 export function getExampleEventName(): string {
   return EXAMPLE_EVENT_NAME;
 }
@@ -138,7 +138,6 @@ type EventLeadLink = {
 };
 
 type EventLeadMap = {
-  byZohoId: Record<string, EventLeadLink>;
   byContactKey: Record<string, EventLeadLink>;
 };
 
@@ -152,21 +151,20 @@ function eventContactKey(email?: string, phone?: string): string {
 
 function readEventLeadMap(): EventLeadMap {
   if (typeof window === "undefined") {
-    return { byZohoId: {}, byContactKey: {} };
+    return { byContactKey: {} };
   }
   try {
     const raw = localStorage.getItem(EVENT_LEAD_MAP_KEY);
-    if (!raw) return { byZohoId: {}, byContactKey: {} };
+    if (!raw) return { byContactKey: {} };
     const parsed = JSON.parse(raw) as Partial<EventLeadMap>;
     return {
-      byZohoId: parsed.byZohoId && typeof parsed.byZohoId === "object" ? parsed.byZohoId : {},
       byContactKey:
         parsed.byContactKey && typeof parsed.byContactKey === "object"
           ? parsed.byContactKey
           : {},
     };
   } catch {
-    return { byZohoId: {}, byContactKey: {} };
+    return { byContactKey: {} };
   }
 }
 
@@ -175,10 +173,9 @@ function writeEventLeadMap(map: EventLeadMap): void {
   localStorage.setItem(EVENT_LEAD_MAP_KEY, JSON.stringify(map));
 }
 
-/** Remember which event a lead belongs to (survives Zoho lag / empty Features column). */
+/** Remember which event a lead belongs to (survives sync lag / empty event field). */
 export function recordContactEventLink(meta: {
   eventName: string;
-  zohoLeadId?: string | null;
   email?: string;
   phone?: string;
 }): void {
@@ -187,10 +184,6 @@ export function recordContactEventLink(meta: {
 
   const link: EventLeadLink = { eventName, updatedAt: new Date().toISOString() };
   const map = readEventLeadMap();
-  const zohoId = String(meta.zohoLeadId || "").trim();
-  if (zohoId) {
-    map.byZohoId[zohoId] = link;
-  }
   const key = eventContactKey(meta.email, meta.phone);
   if (key) {
     map.byContactKey[key] = link;
@@ -200,7 +193,6 @@ export function recordContactEventLink(meta: {
 
 export function resolveEventNameForContact(contact: {
   eventName?: string;
-  zohoLeadId?: string | null;
   email?: string;
   phone?: string;
 }): string {
@@ -208,10 +200,6 @@ export function resolveEventNameForContact(contact: {
   if (direct) return direct;
 
   const map = readEventLeadMap();
-  const zohoId = String(contact.zohoLeadId || "").trim();
-  if (zohoId && map.byZohoId[zohoId]?.eventName) {
-    return map.byZohoId[zohoId].eventName;
-  }
   const key = eventContactKey(contact.email, contact.phone);
   if (key && map.byContactKey[key]?.eventName) {
     return map.byContactKey[key].eventName;

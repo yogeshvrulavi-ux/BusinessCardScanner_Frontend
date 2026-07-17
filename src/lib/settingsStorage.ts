@@ -12,9 +12,8 @@ export type UserSettings = {
   captureNotificationsEnabled: boolean;
   emailNotificationsEnabled: boolean;
   whatsappNotificationsEnabled: boolean;
+  /** Sync queued + unsynced IndexedDB contacts to PostgreSQL when internet returns. */
   autoSyncQueueWhenOnline: boolean;
-  /** Sync queued + unsynced IndexedDB contacts to Zoho when internet returns. */
-  autoSyncToZohoWhenOnline: boolean;
   showCaptureTips: boolean;
   confirmBeforeDelete: boolean;
   preferOfflineCapture: boolean;
@@ -56,7 +55,6 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   cookiesAccepted: false,
   analyticsCookiesEnabled: false,
   autoSyncQueueWhenOnline: true,
-  autoSyncToZohoWhenOnline: true,
   showCaptureTips: true,
   confirmBeforeDelete: true,
   preferOfflineCapture: false,
@@ -71,10 +69,9 @@ export function loadUserSettings(): UserSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_USER_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<UserSettings>;
-    const autoSyncToZohoWhenOnline =
-      parsed.autoSyncToZohoWhenOnline ??
+    const autoSyncQueueWhenOnline =
       parsed.autoSyncQueueWhenOnline ??
-      DEFAULT_USER_SETTINGS.autoSyncToZohoWhenOnline;
+      DEFAULT_USER_SETTINGS.autoSyncQueueWhenOnline;
 
     const needsWhatsappMigration = !localStorage.getItem(WHATSAPP_ENABLE_MIGRATION_KEY);
     const whatsappNotificationsEnabled = needsWhatsappMigration
@@ -88,8 +85,7 @@ export function loadUserSettings(): UserSettings {
     const merged = {
       ...DEFAULT_USER_SETTINGS,
       ...parsed,
-      autoSyncToZohoWhenOnline,
-      autoSyncQueueWhenOnline: autoSyncToZohoWhenOnline,
+      autoSyncQueueWhenOnline,
       whatsappNotificationsEnabled,
     };
     if (needsWhatsappMigration) {
@@ -103,12 +99,6 @@ export function loadUserSettings(): UserSettings {
 
 export function saveUserSettings(settings: Partial<UserSettings>): UserSettings {
   const next = { ...loadUserSettings(), ...settings };
-  if (settings.autoSyncToZohoWhenOnline !== undefined) {
-    next.autoSyncQueueWhenOnline = settings.autoSyncToZohoWhenOnline;
-  }
-  if (settings.autoSyncQueueWhenOnline !== undefined && settings.autoSyncToZohoWhenOnline === undefined) {
-    next.autoSyncToZohoWhenOnline = settings.autoSyncQueueWhenOnline;
-  }
   if (typeof window !== "undefined") {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     window.dispatchEvent(new CustomEvent("cs-settings-updated", { detail: next }));

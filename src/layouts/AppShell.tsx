@@ -12,7 +12,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { NetworkOfflineBanner } from "@/components/layout/NetworkOfflineBanner";
 import { ConfirmModalProvider } from "@/components/ui/confirm-modal";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
-import { countPendingSync, maybeAutoSyncWhenOnline } from "@/lib/autoZohoSync";
+import { countPendingSync, maybeAutoSyncWhenOnline } from "@/lib/autoSync";
 import { loadUserSettings } from "@/lib/settingsStorage";
 import { useForceLightMode } from "@/hooks/useForceLightMode";
 export function AppShell() {
@@ -20,9 +20,11 @@ export function AppShell() {
   const router = useRouter();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isAuthRoute = pathname.startsWith("/auth");
+  const isRegisterRoute = pathname.startsWith("/register");
+  const isPublicShellRoute = isAuthRoute || isRegisterRoute;
   const authRequired = isAuthEnabled;
 
-  useForceLightMode(isAuthRoute);
+  useForceLightMode(isPublicShellRoute);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -49,7 +51,7 @@ export function AppShell() {
       if (!navigator.onLine) return;
 
       const prefs = loadUserSettings();
-      if (!prefs.autoSyncToZohoWhenOnline) return;
+      if (!prefs.autoSyncQueueWhenOnline) return;
 
       try {
         const pending = await countPendingSync();
@@ -108,7 +110,7 @@ export function AppShell() {
     };
   }, [router]);
 
-  if (isAuthRoute) {
+  if (isPublicShellRoute) {
     return (
       <QueryClientProvider client={queryClient}>
         <Outlet />

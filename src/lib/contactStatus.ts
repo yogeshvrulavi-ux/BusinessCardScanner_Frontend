@@ -6,9 +6,7 @@ export function resolveStoredContactStatus(
   const syncStatus = String(contact.syncStatus || "");
   if (syncStatus === "failed" || contact.status === "failed") return "failed";
   if (
-    syncStatus === "synced_zoho" ||
-    contact.zohoLeadId ||
-    contact.zohoSynced ||
+    syncStatus === "synced" ||
     contact.status === "synced"
   ) {
     return "synced";
@@ -21,15 +19,15 @@ export function resolveStoredContactLastSync(
   status: ContactStatus,
 ): string {
   if (status === "synced") {
-    return String(contact.lastSync || contact.synced_at || "Synced to Zoho");
+    return String(contact.lastSync || contact.synced_at || "Synced to database");
   }
   if (status === "failed") {
     return String(contact.sync_error || contact.lastSync || "Sync failed");
   }
   if (contact.syncStatus === "local_only") {
-    return "Local PostgreSQL · pending Zoho";
+    return "Local PostgreSQL · pending sync";
   }
-  return "Pending Zoho sync";
+  return "Pending sync";
 }
 
 /** @deprecated Use resolveStoredContactStatus */

@@ -104,6 +104,6 @@ httpServer.listen(port, host, () => {
   console.log(`Serving production build from dist/`);
   console.log(`  App:    http://${host}:${port}/`);
   console.log(`  Scan:   http://${host}:${port}/scan`);
-  console.log(`  Static: dist/client (assets, sw.js, tessdata)`);
+  console.log(`  Static: dist/client (assets, sw.js)`);
   console.log(`  API:    set VITE_API_URL or run Python backend separately (npm run server)`);
 });
