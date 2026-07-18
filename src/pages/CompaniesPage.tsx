@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageShell } from "@/components/layout/PageShell";
 import { AuthGate } from "@/components/auth/AuthGate";
-import { CreateCompanyModal } from "@/components/admin/CreateCompanyModal";
+import { InviteUserModal } from "@/components/admin/InviteUserModal";
 import { useConfirmModal } from "@/components/ui/confirm-modal";
 import { toast } from "sonner";
 import {
@@ -94,7 +94,7 @@ function CompaniesPageInner() {
 
   return (
     <>
-      <CreateCompanyModal
+      <InviteUserModal
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSuccess={() => void load(true)}

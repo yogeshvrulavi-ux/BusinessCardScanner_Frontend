@@ -251,9 +251,10 @@ export function removeOutreachStatusForContact(
 /** Icon mapping helper: success | failure | pending (no send result yet). */
 export function resolveChannelIconStatus(
   record: OutreachDeliveryRecord | undefined,
-): "success" | "failure" | "pending" {
+): "success" | "failure" | "not_sent" | "pending" {
   if (!record) return "pending";
   if (record.state === "success") return "success";
   if (record.state === "failure") return "failure";
+  if (record.state === "skipped" || record.state === "unavailable") return "not_sent";
   return "pending";
 }

@@ -12,9 +12,12 @@ type AuditLog = {
   id: string;
   user_id: string | null;
   action: string;
-  ip_address?: string;
   created_at: string;
   new_value?: unknown;
+  actor_name?: string;
+  actor_username?: string;
+  actor_email?: string;
+  actor_role?: string;
 };
 
 export function AuditLogsPage() {
@@ -80,8 +83,8 @@ function AuditLogsPageInner() {
                 <tr>
                   <th className="px-4 py-3 font-medium">When</th>
                   <th className="px-4 py-3 font-medium">Action</th>
-                  <th className="px-4 py-3 font-medium">User</th>
-                  <th className="px-4 py-3 font-medium">IP</th>
+                  <th className="px-4 py-3 font-medium">Performed By</th>
+                  <th className="px-4 py-3 font-medium">Role</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -91,8 +94,15 @@ function AuditLogsPageInner() {
                       {log.created_at ? new Date(log.created_at).toLocaleString() : "—"}
                     </td>
                     <td className="px-4 py-3 font-medium">{log.action}</td>
-                    <td className="px-4 py-3 font-mono text-xs">{log.user_id ?? "—"}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{log.ip_address || "—"}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{log.actor_name?.trim() || log.actor_username || "System"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {log.actor_email || (log.user_id ? `User ${log.user_id}` : "Automated event")}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {log.actor_role?.replaceAll("_", " ") || "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

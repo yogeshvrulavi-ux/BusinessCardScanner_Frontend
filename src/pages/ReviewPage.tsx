@@ -114,6 +114,33 @@ const emptyPickers = (): PickerState => ({
   social: [],
 });
 
+function syncEditedPickerValue(
+  items: PickerItem[],
+  role: "primary" | "secondary",
+  value: string,
+): PickerItem[] {
+  const trimmed = value.trim();
+  const roleIndex = items.findIndex((item) => item.role === role);
+
+  if (!trimmed) {
+    return roleIndex >= 0 ? items.filter((_, index) => index !== roleIndex) : items;
+  }
+
+  const withoutDuplicate = items.filter(
+    (item, index) => index === roleIndex || item.value.trim() !== trimmed,
+  );
+  const adjustedIndex = withoutDuplicate.findIndex((item) => item.role === role);
+  if (adjustedIndex >= 0) {
+    return withoutDuplicate.map((item, index) =>
+      index === adjustedIndex
+        ? { ...item, value: trimmed, included: true, role }
+        : item,
+    );
+  }
+
+  return [...withoutDuplicate, { value: trimmed, included: true, role }];
+}
+
 export const ReviewPage = () => {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -226,6 +253,28 @@ export const ReviewPage = () => {
 
   const handleFormChange = (name: string, value: string) => {
     form.setValue(name, value);
+
+    const pickerTarget: Record<
+      string,
+      { key: "phones" | "emails"; role: "primary" | "secondary" }
+    > = {
+      phoneNumber: { key: "phones", role: "primary" },
+      secondaryPhoneNumber: { key: "phones", role: "secondary" },
+      emailAddress: { key: "emails", role: "primary" },
+      secondaryEmailAddress: { key: "emails", role: "secondary" },
+    };
+    const target = pickerTarget[name];
+    if (target) {
+      setPickers((current) => ({
+        ...current,
+        [target.key]: syncEditedPickerValue(
+          current[target.key],
+          target.role,
+          value,
+        ),
+      }));
+    }
+
     if (name === "firstName" || name === "lastName") {
       const first = name === "firstName" ? value : form.values.firstName;
       const last = name === "lastName" ? value : form.values.lastName;

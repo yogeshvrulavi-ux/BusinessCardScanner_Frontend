@@ -24,10 +24,6 @@ const EMPTY: CreateCompanyData = {
   company_name: "",
   company_code: "",
   admin_email: "",
-  address: "",
-  phone: "",
-  email: "",
-  website: "",
 };
 
 export function CreateCompanyModal({ open, onOpenChange, onSuccess }: Props) {
@@ -89,7 +85,7 @@ export function CreateCompanyModal({ open, onOpenChange, onSuccess }: Props) {
                   required
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-1">
                 <Label htmlFor="company_code">Company Code *</Label>
                 <Input
                   id="company_code"
@@ -97,43 +93,6 @@ export function CreateCompanyModal({ open, onOpenChange, onSuccess }: Props) {
                   onChange={(e) => set("company_code", e.target.value.toUpperCase())}
                   placeholder="ACME"
                   required
-                />
-              </div>
-              <div>
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={form.phone ?? ""}
-                  onChange={(e) => set("phone", e.target.value)}
-                  placeholder="+1 555-0100"
-                />
-              </div>
-              <div>
-                <Label htmlFor="email">Company Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={form.email ?? ""}
-                  onChange={(e) => set("email", e.target.value)}
-                  placeholder="info@acme.com"
-                />
-              </div>
-              <div className="col-span-2">
-                <Label htmlFor="website">Website</Label>
-                <Input
-                  id="website"
-                  value={form.website ?? ""}
-                  onChange={(e) => set("website", e.target.value)}
-                  placeholder="https://acme.com"
-                />
-              </div>
-              <div className="col-span-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  value={form.address ?? ""}
-                  onChange={(e) => set("address", e.target.value)}
-                  placeholder="123 Main St, City"
                 />
               </div>
             </div>

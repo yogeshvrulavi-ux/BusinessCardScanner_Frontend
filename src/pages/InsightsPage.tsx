@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BarChart3, Loader2, RefreshCw, Users, Building2, TrendingUp } from "lucide-react";
+import { BarChart3, CalendarDays, Loader2, RefreshCw, Users, Building2, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/layout/PageShell";
@@ -14,7 +14,31 @@ type AnalyticsSummary = {
   pending: number;
   failed: number;
   by_company: Array<{ company_name: string; count: number }>;
-  by_user: Array<{ user_name: string; company_name: string; count: number }>;
+  by_user: Array<{
+    user_id: string | null;
+    user_name: string;
+    username: string;
+    email: string;
+    role: string;
+    company_name: string;
+    admin_name: string;
+    count: number;
+    event_count: number;
+  }>;
+  by_event: Array<{
+    event_id: string | null;
+    event_name: string;
+    company_name: string;
+    admin_name: string;
+    contact_count: number;
+    user_count: number;
+    synced: number;
+    pending: number;
+    failed: number;
+    contributors: string;
+    first_capture: string;
+    last_capture: string;
+  }>;
   recent_activity: Array<{ date: string; count: number }>;
   error?: string;
 };
@@ -134,27 +158,85 @@ function InsightsPageInner() {
             </Card>
           )}
 
+          {/* Event activity */}
+          {data.by_event.length > 0 && (
+            <Card className="rounded-2xl border-border/60 p-5 shadow-soft">
+              <h3 className="mb-1 flex items-center gap-2 font-display text-base font-semibold">
+                <CalendarDays className="h-4 w-4 text-muted-foreground" /> Event Analytics
+              </h3>
+              <p className="mb-4 text-xs text-muted-foreground">
+                Events, team participation, and captured contacts in your accessible companies.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[960px] text-sm">
+                  <thead className="text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="pb-2 font-medium">Event</th>
+                      <th className="pb-2 font-medium">Company / Admin</th>
+                      <th className="pb-2 font-medium">Contributors</th>
+                      <th className="pb-2 font-medium text-right">Users</th>
+                      <th className="pb-2 font-medium text-right">Contacts</th>
+                      <th className="pb-2 font-medium text-right">Synced</th>
+                      <th className="pb-2 font-medium text-right">Pending</th>
+                      <th className="pb-2 font-medium">Last Activity</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {data.by_event.map((row, i) => (
+                      <tr key={`${row.company_name}-${row.event_name}-${row.event_id ?? i}`}>
+                        <td className="py-3 font-medium">{row.event_name}</td>
+                        <td className="py-3">
+                          <div>{row.company_name}</div>
+                          {row.admin_name && (
+                            <div className="text-xs text-muted-foreground">Admin: {row.admin_name}</div>
+                          )}
+                        </td>
+                        <td className="max-w-72 py-3 text-muted-foreground">{row.contributors || "Unknown"}</td>
+                        <td className="py-3 text-right">{row.user_count}</td>
+                        <td className="py-3 text-right font-semibold">{row.contact_count}</td>
+                        <td className="py-3 text-right text-emerald-600">{row.synced}</td>
+                        <td className="py-3 text-right text-amber-600">{row.pending}</td>
+                        <td className="py-3 text-muted-foreground">
+                          {new Date(row.last_capture).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
           {/* By user */}
           {data.by_user.length > 0 && (
             <Card className="rounded-2xl border-border/60 p-5 shadow-soft">
               <h3 className="mb-4 flex items-center gap-2 font-display text-base font-semibold">
-                <Users className="h-4 w-4 text-muted-foreground" /> Top Contributors
+                <Users className="h-4 w-4 text-muted-foreground" /> User Analytics
               </h3>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[820px] text-sm">
                   <thead className="text-left text-[11px] uppercase tracking-wider text-muted-foreground">
                     <tr>
                       <th className="pb-2 font-medium">User</th>
+                      <th className="pb-2 font-medium">Role</th>
                       <th className="pb-2 font-medium">Company</th>
+                      <th className="pb-2 font-medium">Admin</th>
+                      <th className="pb-2 font-medium text-right">Events</th>
                       <th className="pb-2 font-medium text-right">Contacts</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40">
                     {data.by_user.map((row, i) => (
-                      <tr key={`${row.user_name}-${i}`}>
-                        <td className="py-2 font-medium">{row.user_name}</td>
-                        <td className="py-2 text-muted-foreground">{row.company_name}</td>
-                        <td className="py-2 text-right">
+                      <tr key={row.user_id ?? `${row.user_name}-${i}`}>
+                        <td className="py-3">
+                          <div className="font-medium">{row.user_name}</div>
+                          <div className="text-xs text-muted-foreground">{row.email || row.username}</div>
+                        </td>
+                        <td className="py-3 text-muted-foreground">{row.role}</td>
+                        <td className="py-3 text-muted-foreground">{row.company_name}</td>
+                        <td className="py-3 text-muted-foreground">{row.admin_name || "—"}</td>
+                        <td className="py-3 text-right">{row.event_count}</td>
+                        <td className="py-3 text-right">
                           <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold">{row.count}</span>
                         </td>
                       </tr>

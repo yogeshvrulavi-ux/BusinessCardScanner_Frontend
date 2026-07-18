@@ -3,7 +3,7 @@ import type { OutreachDeliveryRecord } from "@/lib/outreachStatusStorage";
 import { resolveChannelIconStatus } from "@/lib/outreachStatusStorage";
 
 type ChannelIconProps = {
-  status: "success" | "failure" | "pending";
+  status: "success" | "failure" | "not_sent" | "pending";
   type: "whatsapp" | "email";
   error?: string | null;
   className?: string;
@@ -72,7 +72,17 @@ function channelTitle(
   if (status === "failure") {
     return error ? `${label} failed: ${error}` : `${label}: send failed`;
   }
+  if (status === "not_sent") {
+    return error ? `${label} not sent: ${error}` : `${label}: not sent`;
+  }
   return `${label}: no send result yet`;
+}
+
+function statusLabel(status: ChannelIconProps["status"]): string {
+  if (status === "success") return "Sent";
+  if (status === "failure") return "Failed";
+  if (status === "not_sent") return "Not sent";
+  return "Pending";
 }
 
 function ChannelBadge({ status, type, error, className }: ChannelIconProps) {
@@ -88,13 +98,15 @@ function ChannelBadge({ status, type, error, className }: ChannelIconProps) {
           ? "bg-success/10 text-success"
           : status === "failure"
             ? "bg-destructive/10 text-destructive"
+            : status === "not_sent"
+              ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
             : "bg-muted text-muted-foreground/60",
         className,
       )}
     >
       {status === "success" ? (
         <CheckIcon className="h-3.5 w-3.5" />
-      ) : status === "failure" ? (
+      ) : status === "failure" || status === "not_sent" ? (
         <CrossIcon className="h-3.5 w-3.5" />
       ) : (
         <PendingIcon className="h-3.5 w-3.5" />
@@ -128,8 +140,8 @@ export function ContactChannelIcons({
 }: ContactChannelIconsProps) {
   if (!showWhatsApp && !showEmail) return null;
 
-  const whatsappStatus = resolveChannelIconStatus(whatsappDelivery);
-  const emailStatus = resolveChannelIconStatus(emailDelivery);
+  const whatsappStatus = phone ? resolveChannelIconStatus(whatsappDelivery) : "not_sent";
+  const emailStatus = email ? resolveChannelIconStatus(emailDelivery) : "not_sent";
 
   if (compact) {
     return (
@@ -142,7 +154,7 @@ export function ContactChannelIcons({
               error={whatsappDelivery?.error}
               className="h-4 w-4"
             />
-            <span className="text-muted-foreground">WhatsApp</span>
+            <span className="text-muted-foreground">WhatsApp: {statusLabel(whatsappStatus)}</span>
           </span>
         ) : null}
         {showEmail ? (
@@ -153,7 +165,7 @@ export function ContactChannelIcons({
               error={emailDelivery?.error}
               className="h-4 w-4"
             />
-            <span className="text-muted-foreground">Email</span>
+            <span className="text-muted-foreground">Email: {statusLabel(emailStatus)}</span>
           </span>
         ) : null}
       </div>
@@ -163,18 +175,24 @@ export function ContactChannelIcons({
   return (
     <div className={cn("flex items-center gap-1.5", className)}>
       {showWhatsApp ? (
-        <ChannelBadge
-          status={whatsappStatus}
-          type="whatsapp"
-          error={whatsappDelivery?.error}
-        />
+        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+          <ChannelBadge
+            status={whatsappStatus}
+            type="whatsapp"
+            error={whatsappDelivery?.error}
+          />
+          WhatsApp: {statusLabel(whatsappStatus)}
+        </span>
       ) : null}
       {showEmail ? (
-        <ChannelBadge
-          status={emailStatus}
-          type="email"
-          error={emailDelivery?.error}
-        />
+        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+          <ChannelBadge
+            status={emailStatus}
+            type="email"
+            error={emailDelivery?.error}
+          />
+          Email: {statusLabel(emailStatus)}
+        </span>
       ) : null}
     </div>
   );

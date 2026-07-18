@@ -23,7 +23,7 @@ export function createPickerItems(values: string[]): PickerItem[] {
   return unique.map((value, index) => ({
     value,
     included: true,
-    role: index === 0 ? "primary" : "none",
+    role: index === 0 ? "primary" : index === 1 ? "secondary" : "none",
   }));
 }
 

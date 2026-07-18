@@ -28,9 +28,7 @@ export type DirectoryContact = {
   whatsappDelivery?: OutreachDeliveryRecord;
   lastSync: string;
   accent: string;
-  /** Admin (company owner) name — populated for SuperAdmin view */
   admin_name?: string;
-  /** User who created/owns the contact */
   user_name?: string;
   createdAt?: string;
 };
@@ -46,6 +44,15 @@ const ACCENTS = [
 
 function attachOutreachStatus<T extends Pick<DirectoryContact, "email" | "phone" | "name">>(
   contact: T,
+  backend?: {
+    emailSent?: boolean;
+    whatsappSent?: boolean;
+    emailStatus?: string;
+    whatsappStatus?: string;
+    emailError?: string;
+    whatsappError?: string;
+    updatedAt?: string;
+  },
 ): T & Pick<DirectoryContact, "emailDelivery" | "whatsappDelivery"> {
   const outreach = getOutreachStatusForContactSync(
     {
@@ -55,10 +62,37 @@ function attachOutreachStatus<T extends Pick<DirectoryContact, "email" | "phone"
     },
     getCurrentAppUserSync(),
   );
+  const backendUpdatedAt = backend?.updatedAt || new Date(0).toISOString();
+  const backendRecord = (
+    status?: string,
+    sent?: boolean,
+    error?: string,
+  ): OutreachDeliveryRecord | undefined => {
+    if (sent || status === "success") {
+      return { state: "success", attempted: true, updatedAt: backendUpdatedAt };
+    }
+    if (status === "failure") {
+      return { state: "failure", attempted: true, error, updatedAt: backendUpdatedAt };
+    }
+    if (status === "not_sent") {
+      return { state: "skipped", attempted: false, error, updatedAt: backendUpdatedAt };
+    }
+    if (status === "pending") {
+      return { state: "unknown", attempted: false, error, updatedAt: backendUpdatedAt };
+    }
+    return undefined;
+  };
   return {
     ...contact,
-    emailDelivery: outreach.emailDelivery,
-    whatsappDelivery: outreach.whatsappDelivery,
+    emailDelivery:
+      backendRecord(backend?.emailStatus, backend?.emailSent, backend?.emailError) ??
+      outreach.emailDelivery,
+    whatsappDelivery:
+      backendRecord(
+        backend?.whatsappStatus,
+        backend?.whatsappSent,
+        backend?.whatsappError,
+      ) ?? outreach.whatsappDelivery,
   };
 }
 
@@ -171,32 +205,43 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
         c.status === "failed" || c.syncStatus === "failed"
           ? ("failed" as ContactStatus)
           : ("synced" as ContactStatus);
-      return attachOutreachStatus({
-        id: String(c.id || `db-${i}`),
-        name,
-        company: String(c.company || ""),
-        title: String(c.title || c.designation || ""),
-        email: String(c.email || ""),
-        phone: String(c.phone || ""),
-        eventName: resolveEventNameForContact({
-          eventName: String(c.eventName || ""),
+      return attachOutreachStatus(
+        {
+          id: String(c.id || `db-${i}`),
+          name,
+          company: String(c.company || ""),
+          title: String(c.title || c.designation || ""),
           email: String(c.email || ""),
           phone: String(c.phone || ""),
-        }),
-        notes: String(c.notes || ""),
-        source: "localdb" as const,
-        initials,
-        accent: ACCENTS[i % ACCENTS.length],
-        status,
-        channels: (c.channels as DirectoryContact["channels"]) || {
-          whatsapp: !!c.phone,
-          email: !!c.email,
+          eventName: resolveEventNameForContact({
+            eventName: String(c.eventName || ""),
+            email: String(c.email || ""),
+            phone: String(c.phone || ""),
+          }),
+          notes: String(c.notes || ""),
+          source: "localdb" as const,
+          initials,
+          accent: ACCENTS[i % ACCENTS.length],
+          status,
+          channels: (c.channels as DirectoryContact["channels"]) || {
+            whatsapp: !!c.phone,
+            email: !!c.email,
+          },
+          lastSync: status === "synced" ? String(c.lastSync || c.created_at || "Synced") : String(c.lastSync || ""),
+          admin_name: String(c.admin_name || ""),
+          user_name: String(c.user_name || ""),
+          createdAt: String(c.created_at || c.createdAt || ""),
         },
-        lastSync: status === "synced" ? String(c.lastSync || c.created_at || "Synced") : String(c.lastSync || ""),
-        admin_name: String(c.admin_name || ""),
-        user_name: String(c.user_name || ""),
-        createdAt: String(c.created_at || c.createdAt || ""),
-      });
+        {
+          emailSent: c.emailSent === true,
+          whatsappSent: c.whatsappSent === true,
+          emailStatus: String(c.emailDeliveryStatus || ""),
+          whatsappStatus: String(c.whatsappDeliveryStatus || ""),
+          emailError: String(c.emailDeliveryError || ""),
+          whatsappError: String(c.whatsappDeliveryError || ""),
+          updatedAt: String(c.updatedAt || c.created_at || ""),
+        },
+      );
     });
 
   // Also load IndexedDB queue for offline/pending contacts

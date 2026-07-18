@@ -48,6 +48,7 @@ export function ContactsPage() {
   const { q = "", highlight, event: eventFilter = "" } = ContactsRoute.useSearch();
   const { user: authUser } = useAuth();
   const isSuperAdmin = authUser?.role === "SUPER_ADMIN";
+  const isAdmin = authUser?.role === "ADMIN";
   const canDelete = authUser?.role === "SUPER_ADMIN" || authUser?.role === "ADMIN";
   const setQ = (next: string) => {
     void navigate({ search: (prev) => ({ ...prev, q: next.trim() || undefined }), replace: true });
@@ -112,7 +113,10 @@ export function ContactsPage() {
         toast.error("Queued contact not found.");
         return;
       }
-      await syncQueueItem(item);
+      await syncQueueItem(item, {
+        skipWhatsApp: !userSettings.whatsappNotificationsEnabled,
+        skipEmail: !userSettings.emailNotificationsEnabled,
+      });
       toast.success(`Synced: ${item.contact_data.name || "contact"}`);
       window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
       window.dispatchEvent(new CustomEvent("cs-queue-updated"));
@@ -131,7 +135,10 @@ export function ContactsPage() {
     }
     setIsSyncingAll(true);
     try {
-      const result = await syncAllQueueItems();
+      const result = await syncAllQueueItems({
+        skipWhatsApp: !userSettings.whatsappNotificationsEnabled,
+        skipEmail: !userSettings.emailNotificationsEnabled,
+      });
       if (result.synced > 0) {
         toast.success(`Synced ${result.synced} of ${result.total} contact(s).`);
       } else {
@@ -349,9 +356,10 @@ export function ContactsPage() {
                     {isSuperAdmin && (
                       <>
                         <th className="px-4 py-3 font-medium">Admin Name</th>
-                        <th className="px-4 py-3 font-medium">User Name</th>
+                        <th className="px-4 py-3 font-medium">Captured By</th>
                       </>
                     )}
+                    {isAdmin && <th className="px-4 py-3 font-medium">Captured By</th>}
                     <th className="px-4 py-3 font-medium">Event</th>
                     {showTemplateStatusColumn && <th className="px-4 py-3 font-medium">{templateColumnLabel}</th>}
                     <th className="px-4 py-3 font-medium">Status</th>
@@ -385,6 +393,9 @@ export function ContactsPage() {
                           <td className="px-4 py-3 text-xs text-muted-foreground">{c.admin_name || "\u2014"}</td>
                           <td className="px-4 py-3 text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
                         </>
+                      )}
+                      {isAdmin && (
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
                       )}
                       <td className="px-4 py-3 text-muted-foreground">{c.eventName || "\u2014"}</td>
                       {showTemplateStatusColumn && (
@@ -431,11 +442,10 @@ export function ContactsPage() {
                       <div className="truncate text-xs text-muted-foreground">{c.title || "\u2014"} / {c.company || "No company"}</div>
                       {c.email && <div className="truncate text-[11px] text-muted-foreground">{c.email}</div>}
                       {c.phone && <div className="truncate text-[11px] text-muted-foreground">{c.phone}</div>}
-                      {isSuperAdmin && (c.admin_name || c.user_name) && (
+                      {(isSuperAdmin || isAdmin) && c.user_name && (
                         <div className="mt-0.5 text-[11px] text-primary/80">
-                          {c.admin_name && `Admin: ${c.admin_name}`}
-                          {c.admin_name && c.user_name && " | "}
-                          {c.user_name && `User: ${c.user_name}`}
+                          {isSuperAdmin && c.admin_name && `Admin: ${c.admin_name} | `}
+                          Captured by: {c.user_name}
                         </div>
                       )}
                       {c.eventName && <div className="mt-0.5 truncate text-[11px] text-primary/90">Event: {c.eventName}</div>}
