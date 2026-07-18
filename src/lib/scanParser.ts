@@ -59,6 +59,15 @@ function sanitizeUrl(value: string): string {
   return value.replace(/[|&;:)\]\[({"'\\<>~`^*]+$/g, "").trim();
 }
 
+/** Clean each line of a multi-line address while preserving line breaks. */
+function sanitizeAddress(value: string): string {
+  return value
+    .split("\n")
+    .map(stripOcrJunkSymbols)
+    .filter(Boolean)
+    .join("\n");
+}
+
 const normalizeLine = (line: string): string => stripOcrJunkSymbols(line);
 
 const uniqueItems = (items: string[]): string[] =>
@@ -177,20 +186,51 @@ const extractSocialLinks = (lines: string[]) => {
   return { socialLinks, remaining };
 };
 
-const extractAddress = (lines: string[]) => {
-  const addressLines: string[] = [];
-  const remaining: string[] = [];
+// US zip (5 or 5+4) or Indian 6-digit PIN code.
+const ADDRESS_PIN_CODE = /\b\d{5}(?:-\d{4})?\b|\b\d{6}\b/;
 
-  for (const line of lines) {
-    if (isGarbageLine(line)) continue;
-    if (ADDRESS_KEYWORDS.test(line) || (/\d{2,5}/.test(line) && line.includes(","))) {
-      addressLines.push(line);
-    } else {
-      remaining.push(line);
+const isAddressLine = (line: string): boolean =>
+  ADDRESS_KEYWORDS.test(line) ||
+  ADDRESS_PIN_CODE.test(line) ||
+  (/\d{2,5}/.test(line) && line.includes(","));
+
+/**
+ * Group consecutive address lines into complete multi-line address blocks so
+ * addresses spanning several lines (building / street / city-PIN) stay whole.
+ */
+const extractAddress = (lines: string[]) => {
+  const usable = lines.filter((line) => !isGarbageLine(line));
+  const matches = usable.map(isAddressLine);
+
+  // Sandwich rule: a short connector line between two address lines belongs to the block.
+  const include = [...matches];
+  for (let idx = 1; idx < usable.length - 1; idx += 1) {
+    if (!include[idx] && include[idx - 1] && matches[idx + 1] && usable[idx].length <= 60) {
+      include[idx] = true;
     }
   }
 
-  return { addresses: uniqueItems(addressLines), remaining };
+  const addressBlocks: string[] = [];
+  const remaining: string[] = [];
+  let currentBlock: string[] = [];
+
+  usable.forEach((line, idx) => {
+    if (include[idx]) {
+      currentBlock.push(line);
+    } else {
+      if (currentBlock.length > 0) {
+        addressBlocks.push(currentBlock.join("\n"));
+        currentBlock = [];
+      }
+      remaining.push(line);
+    }
+  });
+
+  if (currentBlock.length > 0) {
+    addressBlocks.push(currentBlock.join("\n"));
+  }
+
+  return { addresses: uniqueItems(addressBlocks), remaining };
 };
 
 const extractNameAndDesignation = (lines: string[]) => {
@@ -343,7 +383,7 @@ export function parseOcrText(rawText: string): ScanContact {
   const cleanEmails = sanitizeList(emails, sanitizeEmail);
   const cleanPhones = sanitizeList(phonesResult.phones, sanitizePhone);
   const cleanWebsites = sanitizeList(websites, sanitizeUrl);
-  const cleanAddresses = sanitizeList(addressResult.addresses, stripOcrJunkSymbols);
+  const cleanAddresses = sanitizeList(addressResult.addresses, sanitizeAddress);
   const cleanSocial = sanitizeList(socialLinks, sanitizeUrl);
   const cleanFullName = stripOcrJunkSymbols(fullName);
   const cleanDesignation = stripOcrJunkSymbols(designation);
@@ -369,8 +409,7 @@ export function parseOcrText(rawText: string): ScanContact {
     address: cleanAddresses[0] || "",
     secondaryAddress: cleanAddresses[1] || "",
     addresses: cleanAddresses,
-    socialLinks: cleanSocial.join(", "),
-    socialLinksList: cleanSocial,
+    socialLinks: cleanSocial,
     notes: "",
     confidence: {},
   };

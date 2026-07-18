@@ -21,6 +21,7 @@ import {
 import {
   localContactToPayload,
   queueContactToPayload,
+  updateContactInLocalDb,
   type LocalContact,
 } from "@/lib/localContactApi";
 import { recordContactEventLink } from "@/lib/eventStorage";
@@ -142,6 +143,7 @@ async function saveOnlineToPostgres(
       connectionMode: "online",
       skipWhatsApp: options?.skipWhatsApp,
       skipEmail,
+      cardImageBase64,
     });
     if (body.eventName?.trim()) {
       recordContactEventLink({
@@ -181,6 +183,7 @@ export async function syncQueueItem(
     connectionMode: "online",
     skipWhatsApp: options?.skipWhatsApp,
     skipEmail: options?.skipEmail,
+    cardImageBase64: item.image_base64 || undefined,
   });
   if (payload.eventName?.trim()) {
     recordContactEventLink({
@@ -257,15 +260,32 @@ export async function saveContact(
 }
 
 export async function updateContact(contactId: string, payload: LeadPayload): Promise<void> {
-  const existing = await getStoredContactById(contactId);
-  if (existing) {
-    const email = pickPrimaryEmail(payload);
-    await updateStoredContact(contactId, {
-      ...(payload as Record<string, unknown>),
-      email,
-      emailAddress: email,
-    });
+  const email = pickPrimaryEmail(payload);
+  const nextPayload = { ...payload, email };
+  const online = typeof navigator === "undefined" || navigator.onLine;
+
+  if (online) {
+    await updateContactInLocalDb(contactId, nextPayload);
+    const existing = await getStoredContactById(contactId);
+    if (existing) {
+      await updateStoredContact(contactId, {
+        ...(nextPayload as Record<string, unknown>),
+        emailAddress: email,
+      });
+    }
+    notifyContactsListChanged();
+    return;
   }
+
+  const existing = await getStoredContactById(contactId);
+  if (!existing) {
+    throw new Error("Cannot update contact while offline — contact is not available locally.");
+  }
+  await updateStoredContact(contactId, {
+    ...(nextPayload as Record<string, unknown>),
+    emailAddress: email,
+  });
+  notifyContactsListChanged();
 }
 
 export async function deleteContact(contactId: string): Promise<void> {
@@ -330,7 +350,8 @@ export function buildQueueItemFromPayload(
     id: queueId,
     contact_data: {
       ...stamped,
-      captureSource: "offline_queue",
+      // Keep the original scan source (Camera/Upload) when known.
+      captureSource: String(stamped.captureSource || "") || "offline_queue",
     },
     image_base64: imageBase64,
     status: "pending",

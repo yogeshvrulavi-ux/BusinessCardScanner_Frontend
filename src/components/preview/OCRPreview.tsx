@@ -22,7 +22,7 @@ export const OCRPreview = ({ values }: { values: Record<string, string> }) => {
         <p key={key} className="text-sm leading-relaxed">
           <span className="font-medium text-foreground">{key}</span>
           <span className="text-muted-foreground">: </span>
-          <span className="text-foreground">{value}</span>
+          <span className="whitespace-pre-line text-foreground">{value}</span>
         </p>
       ))}
       <div className="mt-4 inline-flex items-center gap-2 text-sm text-success">

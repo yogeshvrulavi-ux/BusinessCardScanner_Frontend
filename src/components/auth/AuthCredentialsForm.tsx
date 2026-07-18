@@ -102,25 +102,24 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
           {...signInForm.register("identifier")}
         />
 
-        <div className="relative">
-          <AuthField
-            label="Password"
-            type={showPassword ? "text" : "password"}
-            autoComplete="current-password"
-            placeholder="••••••••"
-            error={signInForm.formState.errors.password?.message}
-            className="pr-11"
-            {...signInForm.register("password")}
-          />
-          <button
-            type="button"
-            className="absolute right-3 top-[2.125rem] text-muted-foreground transition-colors hover:text-foreground"
-            onClick={() => setShowPassword((v) => !v)}
-            aria-label={showPassword ? "Hide password" : "Show password"}
-          >
-            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
-        </div>
+        <AuthField
+          label="Password"
+          type={showPassword ? "text" : "password"}
+          autoComplete="current-password"
+          placeholder="••••••••"
+          error={signInForm.formState.errors.password?.message}
+          trailing={
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          }
+          {...signInForm.register("password")}
+        />
 
         <div className="flex items-center justify-between gap-3 text-sm">
           <label className="flex cursor-pointer items-center gap-2 text-muted-foreground">

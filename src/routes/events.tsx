@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { EventsPage } from "@/pages/EventsPage";
+import { AuthGate } from "@/components/auth/AuthGate";
 import { z } from "zod";
 
 const eventsSearchSchema = z.object({
@@ -17,5 +18,13 @@ export const Route = createFileRoute("/events")({
       },
     ],
   }),
-  component: EventsPage,
+  component: EventsRoutePage,
 });
+
+function EventsRoutePage() {
+  return (
+    <AuthGate allowedRoles={["ADMIN", "USER"]}>
+      <EventsPage />
+    </AuthGate>
+  );
+}

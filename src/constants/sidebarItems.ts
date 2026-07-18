@@ -3,6 +3,8 @@ import {
   Users,
   Contact,
   ScanLine,
+  FolderKanban,
+  Inbox,
   BarChart3,
   Mail,
   ScrollText,
@@ -46,6 +48,18 @@ export const sidebarItems: SidebarItem[] = [
     url: "/contacts",
     icon: Contact,
     roles: ["SUPER_ADMIN", "ADMIN", "USER"],
+  },
+  {
+    title: "Events",
+    url: "/events",
+    icon: FolderKanban,
+    roles: ["ADMIN", "USER"],
+  },
+  {
+    title: "Offline Queue",
+    url: "/queue",
+    icon: Inbox,
+    roles: ["ADMIN", "USER"],
   },
   {
     title: "Analytics / Insights",

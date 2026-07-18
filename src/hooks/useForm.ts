@@ -17,6 +17,11 @@ export const useForm = (fields: LeadField[], initialValues: FormValues) => {
     setValues((prev) => ({ ...prev, ...next }));
   }, []);
 
+  const reset = useCallback((next: FormValues = initialValues) => {
+    setValues(next);
+    setErrors({});
+  }, [initialValues]);
+
   const validate = useCallback((overrides?: FormValues) => {
     let nextErrors: ValidationErrors = {};
     setValues((current) => {
@@ -33,7 +38,7 @@ export const useForm = (fields: LeadField[], initialValues: FormValues) => {
   }, [fields]);
 
   return useMemo(
-    () => ({ values, errors, setValue, setMany, validate }),
-    [values, errors, setValue, setMany, validate],
+    () => ({ values, errors, setValue, setMany, reset, validate }),
+    [values, errors, setValue, setMany, reset, validate],
   );
 };

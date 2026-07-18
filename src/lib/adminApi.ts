@@ -256,8 +256,9 @@ export async function validateInvitationToken(token: string) {
 
 export async function acceptInvitation(data: {
   token: string;
-  first_name: string;
-  last_name: string;
+  full_name: string;
+  first_name?: string;
+  last_name?: string;
   password: string;
   confirm_password: string;
   phone?: string;

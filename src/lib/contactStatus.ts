@@ -5,9 +5,13 @@ export function resolveStoredContactStatus(
 ): ContactStatus {
   const syncStatus = String(contact.syncStatus || "");
   if (syncStatus === "failed" || contact.status === "failed") return "failed";
+  // PostgreSQL rows (and legacy local_only / synced_zoho) are already in the DB.
   if (
     syncStatus === "synced" ||
-    contact.status === "synced"
+    syncStatus === "synced_zoho" ||
+    syncStatus === "local_only" ||
+    contact.status === "synced" ||
+    contact.source === "localdb"
   ) {
     return "synced";
   }
@@ -23,9 +27,6 @@ export function resolveStoredContactLastSync(
   }
   if (status === "failed") {
     return String(contact.sync_error || contact.lastSync || "Sync failed");
-  }
-  if (contact.syncStatus === "local_only") {
-    return "Local PostgreSQL · pending sync";
   }
   return "Pending sync";
 }

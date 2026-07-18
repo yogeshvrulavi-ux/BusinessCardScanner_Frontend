@@ -92,6 +92,7 @@ const CACHE_TTL_MS = 60_000;
 
 let cache: ContactsDirectorySnapshot | null = null;
 let inFlight: Promise<ContactsDirectorySnapshot> | null = null;
+let fetchGeneration = 0;
 const listeners = new Set<() => void>();
 
 export function getContactsDirectorySnapshot(): ContactsDirectorySnapshot | null {
@@ -106,6 +107,7 @@ export function subscribeContactsDirectory(listener: () => void): () => void {
 export function invalidateContactsDirectory(): void {
   cache = null;
   inFlight = null;
+  fetchGeneration += 1;
 }
 
 /** Remove one row from cache immediately (e.g. after delete) without waiting for refetch. */
@@ -115,8 +117,13 @@ export function optimisticallyRemoveDirectoryContact(
   const key = contactRowKey(contact);
   if (!cache) return;
   const nextContacts = cache.contacts.filter((c) => contactRowKey(c) !== key);
-  if (nextContacts.length === cache.contacts.length) return;
+  if (nextContacts.length === cache.contacts.length)
+    {
+      console.log("No changes to contacts directory");
+      return;
+    }
   cache = { ...cache, contacts: nextContacts };
+  console.log("Contacts directory updated");
   notifyContactsDirectorySubscribers();
 }
 
@@ -141,18 +148,15 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
     }
   } catch (err) {
     console.error("PostgreSQL contacts fetch error:", err);
-    // Fallback: try local IndexedDB contacts
     try {
       pgData = (await listContacts()) as Record<string, unknown>[];
     } catch {
-      /* empty */
+      console.error("Failed to read IndexedDB contacts");
     }
     fetchFailed = true;
   }
 
-  // Format PostgreSQL contacts
   const formattedDb: DirectoryContact[] = pgData
-    .filter((c) => contactBelongsToAppUser(c, appUser))
     .map((c, i) => {
       const name = String(c.name || c.fullName || "");
       const initials = name
@@ -164,11 +168,9 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
             .toUpperCase()
         : "";
       const status =
-        c.syncStatus === "synced"
-          ? ("synced" as ContactStatus)
-          : c.syncStatus === "failed"
-            ? ("failed" as ContactStatus)
-            : ("pending" as ContactStatus);
+        c.status === "failed" || c.syncStatus === "failed"
+          ? ("failed" as ContactStatus)
+          : ("synced" as ContactStatus);
       return attachOutreachStatus({
         id: String(c.id || `db-${i}`),
         name,
@@ -190,7 +192,7 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
           whatsapp: !!c.phone,
           email: !!c.email,
         },
-        lastSync: String(c.lastSync || c.created_at || ""),
+        lastSync: status === "synced" ? String(c.lastSync || c.created_at || "Synced") : String(c.lastSync || ""),
         admin_name: String(c.admin_name || ""),
         user_name: String(c.user_name || ""),
         createdAt: String(c.created_at || c.createdAt || ""),
@@ -205,7 +207,7 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
       .filter((item) => contactBelongsToAppUser(item, appUser))
       .map((item) => {
         const c = item.contact_data;
-        const name = c.name || "Unnamed Contact";
+        const name = String(c.fullName || c.name || "Unnamed Contact");
         const initials = name
           ? name
               .split(" ")
@@ -258,26 +260,28 @@ export async function loadContactsDirectory(options?: {
   const force = options?.force ?? false;
   const now = Date.now();
 
-  if (force) {
-    inFlight = null;
-  }
-
   if (!force && cache && now - cache.fetchedAt < CACHE_TTL_MS) {
     return cache;
   }
 
-  if (inFlight) {
+  if (!force && inFlight) {
     return inFlight;
   }
 
+  const generation = ++fetchGeneration;
   inFlight = (async () => {
     try {
       const snapshot = await fetchContactsFromPostgres();
-      cache = snapshot;
-      notifyContactsDirectorySubscribers();
+      // Ignore stale responses when a newer force refresh has started.
+      if (generation === fetchGeneration) {
+        cache = snapshot;
+        notifyContactsDirectorySubscribers();
+      }
       return snapshot;
     } finally {
-      inFlight = null;
+      if (generation === fetchGeneration) {
+        inFlight = null;
+      }
     }
   })();
 

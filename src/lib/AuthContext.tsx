@@ -137,11 +137,15 @@ async function apiRefreshToken(refreshToken: string): Promise<TokenPair> {
   return res.json();
 }
 
-async function apiLogout(refreshToken: string): Promise<void> {
+async function apiLogout(refreshToken: string, accessToken?: string | null): Promise<void> {
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
     await fetch(authUrl("/api/auth/logout"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
   } catch { /* best-effort */ }
@@ -253,7 +257,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /* ── Logout ────────────────────────────────────────────────────── */
   const logout = useCallback(async () => {
     const rt = refreshTokenRef.current;
-    if (rt) await apiLogout(rt);
+    const at = accessTokenRef.current;
+    if (rt) await apiLogout(rt, at);
     setAuth(null, null);
   }, [setAuth]);
 

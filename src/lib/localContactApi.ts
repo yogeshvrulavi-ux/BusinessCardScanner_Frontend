@@ -51,10 +51,13 @@ function payloadToLocalBody(
     eventName: payload.eventName || "",
     eventId: payload.eventId || "",
     cardImageBase64,
-    syncStatus: "local_only" as const,
+    syncStatus: options?.connectionMode === "offline" ? ("local_only" as const) : ("synced" as const),
     connectionMode: options?.connectionMode ?? getConnectionMode(),
     skipWhatsApp: Boolean(options?.skipWhatsApp),
     skipEmail: Boolean(options?.skipEmail),
+    ocrEngine: payload.ocrEngine || "",
+    ocrConfidence: payload.ocrConfidence ?? null,
+    captureSource: payload.captureSource || "",
   };
 }
 
@@ -210,6 +213,9 @@ export function queueContactToPayload(contactData: Record<string, unknown>): Lea
     notes: String(contactData.notes || ""),
     eventName: String(contactData.eventName || ""),
     eventId: String(contactData.eventId || ""),
+    ocrEngine: String(contactData.ocrEngine || ""),
+    ocrConfidence: Number(contactData.ocrConfidence) || undefined,
+    captureSource: String(contactData.captureSource || "Offline Queue"),
   };
 }
 

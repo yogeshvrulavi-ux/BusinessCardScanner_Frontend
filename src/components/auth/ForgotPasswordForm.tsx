@@ -151,45 +151,43 @@ export function ForgotPasswordForm() {
             ) : null}
           </div>
 
-          <div className="relative">
-            <AuthField
-              label="New password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
-              placeholder="At least 8 characters"
-              error={resetForm.formState.errors.password?.message}
-              className="pr-11"
-              {...resetForm.register("password")}
-            />
-            <button
-              type="button"
-              className="absolute right-3 top-[2.125rem] text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
+          <AuthField
+            label="New password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
+            placeholder="At least 8 characters"
+            error={resetForm.formState.errors.password?.message}
+            trailing={
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            }
+            {...resetForm.register("password")}
+          />
 
-          <div className="relative">
-            <AuthField
-              label="Confirm new password"
-              type={showConfirm ? "text" : "password"}
-              autoComplete="new-password"
-              placeholder="Repeat new password"
-              error={resetForm.formState.errors.confirmPassword?.message}
-              className="pr-11"
-              {...resetForm.register("confirmPassword")}
-            />
-            <button
-              type="button"
-              className="absolute right-3 top-[2.125rem] text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setShowConfirm((v) => !v)}
-              aria-label={showConfirm ? "Hide password" : "Show password"}
-            >
-              {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
+          <AuthField
+            label="Confirm new password"
+            type={showConfirm ? "text" : "password"}
+            autoComplete="new-password"
+            placeholder="Repeat new password"
+            error={resetForm.formState.errors.confirmPassword?.message}
+            trailing={
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                onClick={() => setShowConfirm((v) => !v)}
+                aria-label={showConfirm ? "Hide password" : "Show password"}
+              >
+                {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            }
+            {...resetForm.register("confirmPassword")}
+          />
 
           <SubmitButton loading={submitting} label="Update password" />
 

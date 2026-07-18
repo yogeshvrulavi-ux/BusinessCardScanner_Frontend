@@ -19,6 +19,10 @@ export type LeadPayload = {
   eventName?: string;
   /** Client-side event id from local event list. */
   eventId?: string;
+  /** Scan metadata (Google Sheets reporting only; not stored in PostgreSQL). */
+  ocrEngine?: string;
+  ocrConfidence?: number;
+  captureSource?: string;
 };
 
 export async function resolveCardImageFile(

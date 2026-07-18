@@ -58,6 +58,13 @@ export function ContactsPage() {
       replace: true,
     });
   };
+  const clearFilters = () => {
+    setTab("all");
+    void navigate({
+      search: (prev) => ({ ...prev, q: undefined, event: undefined }),
+      replace: true,
+    });
+  };
   const { contacts: contactsList, isLoading, isRefreshing, refresh, removeContact } =
     useContactsDirectory();
   const { settings: userSettings } = useUserSettings();
@@ -75,6 +82,10 @@ export function ContactsPage() {
   const [tab, setTab] = useState<"all" | ContactStatus>("all");
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
+
+  const activeFilterCount =
+    (q ? 1 : 0) + (eventFilter ? 1 : 0) + (tab !== "all" ? 1 : 0);
 
   const reloadContacts = async ({
     silent = false,
@@ -223,18 +234,32 @@ export function ContactsPage() {
             <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${isRefreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button variant="outline" className="h-10 w-full rounded-xl sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => setShowFilters((prev) => !prev)}
+            aria-expanded={showFilters}
+            className={cn("h-10 w-full rounded-xl sm:w-auto", showFilters && "border-primary/50 bg-primary/5 text-primary")}
+          >
             <Filter className="mr-2 h-4 w-4 shrink-0" /> Filters
+            {activeFilterCount > 0 && (
+              <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
+                {activeFilterCount}
+              </span>
+            )}
           </Button>
-          <Button className="h-10 w-full rounded-xl bg-gradient-primary shadow-glow sm:w-auto">
+          <Button
+            onClick={() => void navigate({ to: "/scan" })}
+            className="h-10 w-full rounded-xl bg-gradient-primary shadow-glow sm:w-auto"
+          >
             <Plus className="mr-2 h-4 w-4 shrink-0" /> New contact
           </Button>
         </div>
       }
     >
       <Card className="rounded-2xl border-border/60 p-3 shadow-soft sm:p-5">
+        {showFilters && (
         <div className="flex flex-col gap-3">
-          <div className="relative hidden w-full md:block">
+          <div className="relative w-full">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, email, or event" className="h-10 w-full rounded-md border-border/60 bg-background pl-9" />
           </div>
@@ -250,6 +275,16 @@ export function ContactsPage() {
                 ))}
               </SelectContent>
             </Select>
+            {activeFilterCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="h-10 rounded-md text-xs text-muted-foreground hover:text-foreground sm:ml-auto"
+              >
+                Clear filters
+              </Button>
+            )}
           </div>
           <div className="w-full lg:hidden">
             <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="w-full">
@@ -275,6 +310,7 @@ export function ContactsPage() {
             </Tabs>
           </div>
         </div>
+        )}
 
         {showInitialLoading ? (
           <div className="mt-8 flex flex-col items-center justify-center py-12 text-center">

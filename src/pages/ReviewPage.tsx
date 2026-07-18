@@ -16,6 +16,7 @@ import { FormSection } from "@/components/form/FormSection";
 import { FormGrid } from "@/components/form/FormGrid";
 import { FormRow } from "@/components/form/FormRow";
 import { FieldRenderer } from "@/components/form/FieldRenderer";
+import { FieldClearButton } from "@/components/form/inputs/BaseInput";
 import { FormActions } from "@/components/form/FormActions";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Button } from "@/components/common/Button";
@@ -44,25 +45,58 @@ import {
 import { checkForDuplicates, type DuplicateMatch } from "@/lib/duplicateDetection";
 import { notifyOutreachAfterSync } from "@/lib/outreachFeedback";
 import { loadUserSettings } from "@/lib/settingsStorage";
-import { parseScanContact } from "@/lib/scanResult";
+import { emptyScanContact, parseScanContact } from "@/lib/scanResult";
 import { scanFileAndStore } from "@/lib/scanPipeline";
 import { loadScanSession, readFileAsDataUrl, dataUrlToFile, isEmptyScanContact } from "@/lib/scanSession";
 import { EventNameCombobox } from "@/components/review/EventNameCombobox";
-import { getLastUsedEventName, loadEvents, resolveEventForSave } from "@/lib/eventStorage";
+import { loadEvents, resolveEventForSave } from "@/lib/eventStorage";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
+import { useConfirmModal } from "@/components/ui/confirm-modal";
 import { cn } from "@/lib/utils";
-
-const sectionMap = {
-  basic: "Basic Information",
-  contact: "Contact Information",
-  company: "Company Information",
-  extra: "Additional Details",
-} as const;
 
 const initialValues = leadFields.reduce<Record<string, string>>((acc, field) => {
   acc[field.name] = "";
   return acc;
 }, {});
+
+const fieldByName = new Map(leadFields.map((field) => [field.name, field]));
+
+type FieldSlot = { name: string; span?: 1 | 2 };
+
+/** Collapsed layout: primary fields only, two per row, address full width. */
+const collapsedLayout: FieldSlot[] = [
+  { name: "fullName" },
+  { name: "firstName" },
+  { name: "lastName" },
+  { name: "designation" },
+  { name: "companyName" },
+  { name: "phoneNumber" },
+  { name: "emailAddress" },
+  { name: "website" },
+  { name: "address", span: 2 },
+];
+
+/**
+ * Expanded layout: each secondary field sits beside its related primary field
+ * (phone next to phone, email next to email, etc.) instead of a separate section.
+ */
+const expandedLayout: FieldSlot[] = [
+  { name: "fullName" },
+  { name: "firstName" },
+  { name: "lastName" },
+  { name: "designation" },
+  { name: "companyName", span: 2 },
+  { name: "phoneNumber" },
+  { name: "secondaryPhoneNumber" },
+  { name: "emailAddress" },
+  { name: "secondaryEmailAddress" },
+  { name: "website" },
+  { name: "secondaryWebsite" },
+  { name: "address", span: 1 },
+  { name: "secondaryAddress", span: 1 },
+  { name: "socialLinks", span: 2 },
+  { name: "gstNumber" },
+];
 
 type PickerState = {
   phones: PickerItem[];
@@ -88,6 +122,11 @@ export const ReviewPage = () => {
   const pendingPayloadRef = useRef<LeadPayload | null>(null);
   const pendingImageRef = useRef<File | null>(null);
   const autoExtractedRef = useRef(false);
+  const scanMetaRef = useRef<{
+    ocrEngine?: string;
+    ocrConfidence?: number;
+    captureSource?: string;
+  }>({});
 
   const [isDragging, setIsDragging] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -100,11 +139,13 @@ export const ReviewPage = () => {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
-  const [eventName, setEventName] = useState(() => getLastUsedEventName() || "");
+  // Event assignment is optional — always start blank, never prefill a default.
+  const [eventName, setEventName] = useState("");
   const [eventError, setEventError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const notesRef = useRef("");
   const { success, error, info } = useToast();
+  const { confirm } = useConfirmModal();
   const speech = useSpeechToText({
     onUnsupported: () => info("Speech-to-text is not supported in this browser. Use Chrome or Edge."),
     onError: (message) => {
@@ -176,6 +217,11 @@ export const ReviewPage = () => {
     if (imageDataUrl) setSavedScanImage(imageDataUrl);
     if (contact) applyScanData(parseScanContact(contact));
     setOcrWarning(meta?.ocrWarning ?? null);
+    scanMetaRef.current = {
+      ocrEngine: meta?.ocrEngine,
+      ocrConfidence: meta?.ocrConfidence,
+      captureSource: meta?.captureSource,
+    };
   }, [applyScanData]);
 
   const handleFormChange = (name: string, value: string) => {
@@ -203,6 +249,33 @@ export const ReviewPage = () => {
   const handleNotesDictation = () => {
     speech.toggleListening(notesRef.current, (value) => setNotes(value));
   };
+
+  const clearExtractedFields = async () => {
+    const confirmed = await confirm({
+      title: "Clear all extracted data?",
+      description:
+        "Are you sure you want to clear all extracted data?\nThe scanned image will remain available.",
+      confirmLabel: "Clear",
+      cancelLabel: "Cancel",
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    speech.stopListening();
+    form.reset(initialValues);
+    setPickers(emptyPickers());
+    setConfidence({});
+    setOcrWarning(null);
+    setDuplicateMatch(null);
+    setShowDuplicateModal(false);
+    pendingPayloadRef.current = null;
+    pendingImageRef.current = null;
+    // Replace the stored scan result so cleared fields do not rehydrate,
+    // and block the auto-OCR retry from re-filling them on this visit.
+    autoExtractedRef.current = true;
+    sessionStorage.setItem("latestScanResult", JSON.stringify(emptyScanContact()));
+    info("Extracted fields cleared. The scanned image was kept.");
+  };
   const whatsappTemplateOnSave =
     settings.whatsappNotificationsEnabled &&
     typeof navigator !== "undefined" &&
@@ -220,28 +293,6 @@ export const ReviewPage = () => {
     [form.values.firstName, form.values.lastName].filter(Boolean).join(" ").trim();
 
   const hasDetectedName = Boolean(resolvedFullName);
-
-  const isOptionalField = (field: typeof leadFields[number]) =>
-    field.name === "firstName" ||
-    field.name === "lastName" ||
-    field.name.startsWith("secondary") ||
-    field.section === "extra";
-
-  const shouldShowField = (field: typeof leadFields[number]) => {
-    if (!showAdvancedFields && isOptionalField(field)) {
-      if (field.name === "firstName" || field.name === "lastName") {
-        return !form.values.fullName.trim() || Boolean(form.values[field.name]);
-      }
-      return Boolean(form.values[field.name]);
-    }
-    return true;
-  };
-
-  const visibleFields = leadFields.filter(shouldShowField);
-
-  const hasOptionalValues = leadFields.some((field) =>
-    isOptionalField(field) && Boolean(form.values[field.name]),
-  );
 
   const [scanRevision, setScanRevision] = useState(0);
 
@@ -272,14 +323,25 @@ export const ReviewPage = () => {
     const next = { ...pickers, [key]: items };
     setPickers(next);
     applyPickerToForm(next);
-  };
+  };  
 
   const runExtraction = async (file: File) => {
     setIsExtracting(true);
     try {
       const dataUrl = await readFileAsDataUrl(file);
       setSavedScanImage(dataUrl);
-      const { contact, ocrWarning: warning } = await scanFileAndStore(file, dataUrl);
+      const result = await scanFileAndStore(
+        file,
+        dataUrl,
+        undefined,
+        scanMetaRef.current.captureSource,
+      );
+      const { contact, ocrWarning: warning } = result;
+      scanMetaRef.current = {
+        ...scanMetaRef.current,
+        ocrEngine: result.ocrEngine,
+        ocrConfidence: result.ocrConfidence,
+      };
       applyScanData(parseScanContact(contact));
       setOcrWarning(warning ?? null);
       if (warning) {
@@ -343,6 +405,9 @@ export const ReviewPage = () => {
       notes: notes.trim(),
       eventName: trimmedEvent,
       eventId: existingEvent?.id,
+      ocrEngine: scanMetaRef.current.ocrEngine,
+      ocrConfidence: scanMetaRef.current.ocrConfidence,
+      captureSource: scanMetaRef.current.captureSource,
     };
   };
 
@@ -519,16 +584,22 @@ export const ReviewPage = () => {
     await executeSave("new");
   };
 
-  const groupedFields = {
-    basic: visibleFields.filter((f) => f.section === "basic"),
-    contact: visibleFields.filter((f) => f.section === "contact"),
-    company: visibleFields.filter((f) => f.section === "company"),
-    extra: visibleFields.filter((f) => f.section === "extra"),
+  const renderFieldSlot = ({ name, span }: FieldSlot) => {
+    const field = fieldByName.get(name);
+    if (!field) return null;
+    const spansBoth = span === 2 || (span === undefined && field.component === "TextAreaInput");
+    return (
+      <FormRow key={field.name} className={spansBoth ? "md:col-span-2" : ""}>
+        <FieldRenderer
+          field={field}
+          value={form.values[field.name] || ""}
+          error={form.errors[field.name]}
+          confidence={field.confidenceKey ? confidence[field.confidenceKey] : undefined}
+          onChange={handleFormChange}
+        />
+      </FormRow>
+    );
   };
-
-  const visibleSections = (Object.keys(groupedFields) as Array<keyof typeof groupedFields>).filter(
-    (section) => groupedFields[section].length > 0,
-  );
 
   const hasMultiValues =
     pickers.phones.length > 1 ||
@@ -641,6 +712,11 @@ export const ReviewPage = () => {
                         speech.listening && "border-red-300/80 ring-2 ring-red-200/60 dark:border-red-900/60 dark:ring-red-950/40",
                       )}
                     />
+                    <FieldClearButton
+                      onClear={() => handleNotesChange("")}
+                      disabled={notes.length === 0}
+                      className="right-2 top-2"
+                    />
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 rounded-b-sm bg-gradient-to-t from-background via-background/95 to-transparent px-3.5 pb-2.5 pt-6">
                       <span className="text-[11px] tabular-nums text-muted-foreground">
                         {speech.listening ? (
@@ -685,8 +761,48 @@ export const ReviewPage = () => {
         }
         right={
           <Card className="h-full rounded-sm">
+            {(ocrWarning || !hasDetectedName) && (
+              <div className="mb-5 rounded-sm border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+                {ocrWarning ? (
+                  <>
+                    <p className="font-medium">OCR could not read this card</p>
+                    <p className="mt-1 text-amber-800/90 dark:text-amber-100/90">{ocrWarning}</p>
+                    <p className="mt-2 text-xs opacity-90">
+                      Browser OCR runs automatically when the server cannot read the card. You can also edit all fields manually below.
+                    </p>
+                  </>
+                ) : (
+                  <p>
+                    No name detected from the scan. Type the name in Full Name (or First + Last Name) before saving.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <FormSection
+              title="Basic Information"
+              className="pb-5"
+              action={
+                <Button
+                  type="button"
+                  variantType={showAdvancedFields ? "secondary" : "secondary"}
+                  onClick={() => setShowAdvancedFields((prev) => !prev)}
+                  className="h-8 rounded-sm px-3 text-xs font-medium"
+                >
+                  {showAdvancedFields ? "Hide optional fields" : "Show optional fields"}
+                </Button>
+              }
+            >
+              <FormGrid>
+                {(showAdvancedFields ? expandedLayout : collapsedLayout).map(renderFieldSlot)}
+              </FormGrid>
+            </FormSection>
+
             {hasMultiValues && (
-              <FormSection title="Select primary & secondary values" className="mb-5">
+              <FormSection
+                title="Select primary & secondary values"
+                className="border-t border-border/60 pb-5 pt-5"
+              >
                 <p className="mb-4 text-xs text-muted-foreground">
                   Check values to include. Mark one as Primary and optionally one as Secondary. Uncheck to discard.
                 </p>
@@ -710,73 +826,12 @@ export const ReviewPage = () => {
               </FormSection>
             )}
 
-            <FormSection title="Review fields" className="mb-5">
-              <div className="flex flex-col gap-3 rounded-sm border border-sky-200/70 bg-sky-50/80 p-4 text-sm dark:border-slate-700 dark:bg-slate-900/50">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="font-semibold text-slate-700 dark:text-slate-200">Show optional fields</p>
-                  <Button
-                    type="button"
-                    variantType={showAdvancedFields ? "secondary" : "primary"}
-                    onClick={() => setShowAdvancedFields((prev) => !prev)}
-                    className="h-10 rounded-sm px-5"
-                  >
-                    {showAdvancedFields ? "Collapse optional fields" : "Show optional fields"}
-                  </Button>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Tap the button to reveal extra fields only when needed, keeping the form clean and fast.
-                </p>
-              </div>
-            </FormSection>
-            {(ocrWarning || !hasDetectedName) && (
-              <div className="mb-5 rounded-sm border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
-                {ocrWarning ? (
-                  <>
-                    <p className="font-medium">OCR could not read this card</p>
-                    <p className="mt-1 text-amber-800/90 dark:text-amber-100/90">{ocrWarning}</p>
-                    <p className="mt-2 text-xs opacity-90">
-                      Browser OCR runs automatically when the server cannot read the card. You can also edit all fields manually below.
-                    </p>
-                  </>
-                ) : (
-                  <p>
-                    No name detected from the scan. Type the name in Full Name (or First + Last Name) before saving.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {visibleSections.map((section, index) => (
-              <FormSection
-                key={section}
-                title={sectionMap[section]}
-                className={cn("pb-5", index > 0 && "border-t border-border/60 pt-5")}
-              >
-                <FormGrid>
-                  {groupedFields[section].map((field) => (
-                    <FormRow
-                      key={field.name}
-                      className={field.component === "TextAreaInput" ? "md:col-span-2" : ""}
-                    >
-                      <FieldRenderer
-                        field={field}
-                        value={form.values[field.name] || ""}
-                        error={form.errors[field.name]}
-                        confidence={
-                          field.confidenceKey ? confidence[field.confidenceKey] : undefined
-                        }
-                        onChange={handleFormChange}
-                      />
-                    </FormRow>
-                  ))}
-                </FormGrid>
-              </FormSection>
-            ))}
-
             <p className="mb-1 mt-2 text-xs text-muted-foreground">
               Save syncs to the database when online. Event name and notes are stored in the contact record.
             </p>
             <FormActions
+              onClear={() => void clearExtractedFields()}
+              clearDisabled={isSaving || isExtracting}
               onReset={() => {
                 sessionStorage.removeItem("latestScanResult");
                 navigate({ to: "/scan" });

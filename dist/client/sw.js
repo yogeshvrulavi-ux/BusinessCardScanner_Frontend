@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cardsync-cache-v5';
+const CACHE_NAME = 'cardsync-cache-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/scan',
@@ -7,7 +7,6 @@ const ASSETS_TO_CACHE = [
   '/settings',
   '/favicon.png',
   '/logo.png',
-  '/tessdata/eng.traineddata',
 ];
 
 self.addEventListener('install', (event) => {

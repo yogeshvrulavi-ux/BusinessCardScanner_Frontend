@@ -29,6 +29,12 @@ function notifyContactsListChanged(
 async function assertContactOwnedByCurrentUser(
   contact: DirectoryContact,
 ): Promise<void> {
+  // PostgreSQL deletes are authorized by backend RBAC (Admin can remove
+  // teammates' contacts). Client ownership stamps only apply to offline queue.
+  if (contact.source === "localdb") {
+    return;
+  }
+
   const appUser = await getCurrentAppUser();
   if (contact.source === "queue") {
     const items = await getQueueItems();
@@ -39,7 +45,7 @@ async function assertContactOwnedByCurrentUser(
     return;
   }
 
-  if (contact.source === "indexeddb" || contact.source === "localdb") {
+  if (contact.source === "indexeddb") {
     const stored = await getStoredContactById(contact.id);
     if (stored && !contactBelongsToAppUser(stored, appUser)) {
       throw new Error("You do not have permission to delete this contact.");

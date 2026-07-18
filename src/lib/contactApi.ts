@@ -95,6 +95,7 @@ export async function saveContactToBackend(
     connectionMode?: "online" | "offline";
     skipWhatsApp?: boolean;
     skipEmail?: boolean;
+    cardImageBase64?: string;
   },
 ): Promise<SyncResult> {
   let response: Response;
@@ -118,12 +119,18 @@ export async function saveContactToBackend(
         secondaryWebsite: payload.secondaryWebsite,
         address: payload.address,
         secondaryAddress: payload.secondaryAddress,
+        socialLinks: payload.socialLinks || "",
+        gstNumber: payload.gstNumber || "",
         eventName: payload.eventName,
         eventId: payload.eventId,
         notes: payload.notes || "",
+        cardImageBase64: options?.cardImageBase64 || undefined,
         connectionMode: options?.connectionMode ?? "online",
         skipWhatsApp: Boolean(options?.skipWhatsApp),
         skipEmail: Boolean(options?.skipEmail),
+        ocrEngine: payload.ocrEngine || "",
+        ocrConfidence: payload.ocrConfidence ?? null,
+        captureSource: payload.captureSource || "",
       }),
     });
   } catch {

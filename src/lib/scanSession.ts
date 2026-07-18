@@ -7,6 +7,9 @@ const SCAN_META_KEY = "latestScanMeta";
 export type ScanSessionMeta = {
   rawText?: string;
   ocrWarning?: string;
+  ocrEngine?: string;
+  ocrConfidence?: number;
+  captureSource?: string;
   whatsappQueued?: boolean;
   whatsappError?: string | null;
   whatsappTo?: string | null;

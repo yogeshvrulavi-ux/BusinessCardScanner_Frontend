@@ -63,6 +63,30 @@ function findDuplicatesLocally(
 }
 
 export async function checkForDuplicates(payload: LeadPayload): Promise<DuplicateCheckResult> {
+  // Prefer RBAC-scoped PostgreSQL duplicates when online.
+  if (typeof navigator === "undefined" || navigator.onLine) {
+    try {
+      const { API_BASE_URL } = await import("@/lib/api");
+      const { apiFetch } = await import("@/lib/apiFetch");
+      const response = await apiFetch(`${API_BASE_URL}/contacts/check-duplicates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: payload.fullName || "",
+          company: payload.company || "",
+          phone: payload.phone || "",
+          email: payload.email || "",
+        }),
+      });
+      if (response.ok) {
+        const data = (await response.json()) as DuplicateCheckResult;
+        return { duplicates: Array.isArray(data.duplicates) ? data.duplicates : [] };
+      }
+    } catch {
+      // Fall through to IndexedDB when the API is unreachable.
+    }
+  }
+
   const contacts = await listStoredContacts();
   return { duplicates: findDuplicatesLocally(contacts as StoredContact[], payload) };
 }

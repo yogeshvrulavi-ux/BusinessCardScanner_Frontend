@@ -14,6 +14,10 @@ export type ScanExtractionResult = {
   contact: ScanContact;
   rawText?: string;
   ocrWarning?: string;
+  /** Engine that produced the extraction (Textract or PaddleOCR). */
+  ocrEngine?: string;
+  /** Average field confidence 0–100 when the engine reports it. */
+  ocrConfidence?: number;
 };
 
 async function runBrowserExtraction(
@@ -33,7 +37,19 @@ async function runBrowserExtraction(
     contact: result.contact,
     rawText: result.rawText,
     ocrWarning: result.ocrWarning,
+    ocrEngine: "PaddleOCR",
   };
+}
+
+function averageConfidence(confidence: unknown): number | undefined {
+  if (!confidence || typeof confidence !== "object") return undefined;
+  const values = Object.values(confidence as Record<string, unknown>)
+    .map((v) => Number(v))
+    .filter((v) => Number.isFinite(v) && v > 0);
+  if (values.length === 0) return undefined;
+  const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+  // Engines report 0–1 or 0–100; normalize to a 0–100 percentage.
+  return Math.round((avg <= 1 ? avg * 100 : avg) * 10) / 10;
 }
 
 /**
@@ -65,7 +81,12 @@ async function runOnlineExtraction(
 
     onProgress?.({ progress: 100, message: "Extraction complete" });
 
-    return { contact, rawText };
+    return {
+      contact,
+      rawText,
+      ocrEngine: "Textract",
+      ocrConfidence: averageConfidence(data.confidence ?? data.contact?.confidence),
+    };
   } catch (error) {
     console.warn("Online OCR (Textract) failed, falling back to browser OCR:", error);
     return runBrowserExtraction(file, onProgress);
@@ -101,11 +122,15 @@ export async function scanFileAndStore(
   file: File,
   imageDataUrl: string,
   onProgress?: (update: ScanProgress) => void,
+  captureSource?: string,
 ): Promise<ScanExtractionResult> {
   const result = await extractContactFromImage(file, onProgress);
   storeScanSession(result.contact, imageDataUrl, {
     rawText: result.rawText,
     ocrWarning: result.ocrWarning,
+    ocrEngine: result.ocrEngine,
+    ocrConfidence: result.ocrConfidence,
+    captureSource,
   });
   return result;
 }

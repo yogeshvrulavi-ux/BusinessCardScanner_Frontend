@@ -11,8 +11,6 @@ import { useUserSettings } from "@/hooks/useUserSettings";
 import { loadUserSettings } from "@/lib/settingsStorage";
 import { getQueueItems, getCachedContacts, cacheContacts } from "@/lib/indexeddb";
 import { isValidCardImage, readFileAsDataUrl } from "@/lib/scanSession";
-import { getLastUsedEventName } from "@/lib/eventStorage";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 const CameraCapture = lazy(() =>
@@ -22,6 +20,7 @@ const CameraCapture = lazy(() =>
 export function ScanPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const captureSourceRef = useRef<string>("Upload");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -36,17 +35,6 @@ export function ScanPage() {
     typeof window !== "undefined" ? getConnectionMode() : "online",
   );
   const { firstName, settings } = useUserSettings();
-  const [activeEventName, setActiveEventName] = useState(() => getLastUsedEventName());
-
-  useEffect(() => {
-    const refreshActiveEvent = () => setActiveEventName(getLastUsedEventName());
-    window.addEventListener("storage", refreshActiveEvent);
-    window.addEventListener("focus", refreshActiveEvent);
-    return () => {
-      window.removeEventListener("storage", refreshActiveEvent);
-      window.removeEventListener("focus", refreshActiveEvent);
-    };
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -191,6 +179,7 @@ export function ScanPage() {
     if (!processFile(selectedFile)) return;
     try {
       const dataUrl = await readFileAsDataUrl(selectedFile);
+      captureSourceRef.current = "Upload";
       await runScanPipeline(selectedFile, dataUrl, true);
     } catch (err) {
       console.error(err);
@@ -204,6 +193,7 @@ export function ScanPage() {
     if (!processFile(capturedFile)) return;
     try {
       const dataUrl = await readFileAsDataUrl(capturedFile);
+      captureSourceRef.current = "Camera";
       await runScanPipeline(capturedFile, dataUrl, true);
     } catch (err) {
       console.error(err);
@@ -232,10 +222,15 @@ export function ScanPage() {
         toast.info("Extracting contact details from card…");
       }
       const { scanFileAndStore } = await import("@/lib/scanPipeline");
-      await scanFileAndStore(activeFile, activePreview, ({ progress, message }) => {
-        setProgress(Math.max(10, progress));
-        if (progress >= 100 && captureToasts) toast.success(message);
-      });
+      await scanFileAndStore(
+        activeFile,
+        activePreview,
+        ({ progress, message }) => {
+          setProgress(Math.max(10, progress));
+          if (progress >= 100 && captureToasts) toast.success(message);
+        },
+        captureSourceRef.current,
+      );
       finishProcessing(autoNavigate);
     } catch (err) {
       console.error("Scan pipeline failed:", err);
@@ -302,13 +297,6 @@ export function ScanPage() {
               </h2>
             </div>
             <p className="text-xs text-muted-foreground">{dateStr}</p>
-            {activeEventName ? (
-              <div className="pt-1">
-                <Badge variant="secondary" className="rounded-lg px-2.5 py-1 text-[11px] font-medium">
-                  Active event: {activeEventName}
-                </Badge>
-              </div>
-            ) : null}
           </div>
           
           {settings.showCaptureTips ? (
@@ -486,9 +474,15 @@ export function ScanPage() {
           </div>
 
           <div className="mt-auto pt-4">
-            <Button asChild className="w-full rounded-xl bg-gradient-primary shadow-glow" disabled={!isComplete}>
-              <Link to="/review"><ScanLine className="mr-2 h-4 w-4" /> Review extracted details</Link>
-            </Button>
+            {isComplete ? (
+              <Button asChild className="w-full rounded-xl bg-gradient-primary shadow-glow">
+                <Link to="/review"><ScanLine className="mr-2 h-4 w-4" /> Review extracted details</Link>
+              </Button>
+            ) : (
+              <Button disabled className="w-full rounded-xl bg-gradient-primary shadow-glow">
+                <ScanLine className="mr-2 h-4 w-4" /> Review extracted details
+              </Button>
+            )}
           </div>
         </Card>
       </div>
