@@ -14,6 +14,7 @@ export interface QueueItem {
   image_base64?: string;
   capturedByEmail?: string;
   capturedByUserId?: string;
+  capturedByPhone?: string;
 }
 
 const DB_NAME = "cardsync-db";

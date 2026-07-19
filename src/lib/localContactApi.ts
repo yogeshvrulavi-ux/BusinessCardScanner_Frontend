@@ -150,11 +150,12 @@ export async function saveContactToLocalDb(
 export async function updateContactInLocalDb(
   contactId: string,
   payload: LeadPayload,
+  cardImageBase64?: string,
 ): Promise<void> {
   const response = await apiFetch(`${API}/api/contacts/${contactId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payloadToLocalBody(payload)),
+    body: JSON.stringify(payloadToLocalBody(payload, cardImageBase64)),
   });
 
   if (!response.ok) {

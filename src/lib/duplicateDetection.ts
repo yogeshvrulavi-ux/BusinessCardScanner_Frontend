@@ -88,7 +88,33 @@ export async function checkForDuplicates(payload: LeadPayload): Promise<Duplicat
   }
 
   const contacts = await listStoredContacts();
-  return { duplicates: findDuplicatesLocally(contacts as StoredContact[], payload) };
+  const localMatches = findDuplicatesLocally(contacts as StoredContact[], payload);
+
+  // Also treat pending offline queue items as existing contacts.
+  try {
+    const { getQueueItems } = await import("@/lib/indexeddb");
+    const queueItems = await getQueueItems();
+    const queueAsContacts: StoredContact[] = queueItems.map((item) => ({
+      id: item.id,
+      ...(item.contact_data as Record<string, unknown>),
+      fullName: String(item.contact_data.fullName || item.contact_data.name || ""),
+      email: String(item.contact_data.email || ""),
+      phone: String(item.contact_data.phone || ""),
+      company: String(item.contact_data.company || ""),
+    }));
+    const queueMatches = findDuplicatesLocally(queueAsContacts, payload);
+    const seen = new Set(localMatches.map((m) => m.contact.id));
+    for (const match of queueMatches) {
+      if (!seen.has(match.contact.id)) {
+        localMatches.push(match);
+        seen.add(match.contact.id);
+      }
+    }
+  } catch {
+    /* queue optional */
+  }
+
+  return { duplicates: localMatches };
 }
 
 export function diffContacts(

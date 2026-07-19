@@ -31,6 +31,10 @@ export type DirectoryContact = {
   admin_name?: string;
   user_name?: string;
   createdAt?: string;
+  /** True when PostgreSQL has a stored card image (served via /card-image). */
+  hasCardImage?: boolean;
+  /** Offline queue preview data URL (not sent in list payloads for Postgres rows). */
+  queueImageDataUrl?: string;
 };
 
 const ACCENTS = [
@@ -205,6 +209,10 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
         c.status === "failed" || c.syncStatus === "failed"
           ? ("failed" as ContactStatus)
           : ("synced" as ContactStatus);
+      const rawImage = String(c.cardImageBase64 || "");
+      const hasCardImage =
+        Boolean(c.hasCardImage) ||
+        (rawImage.startsWith("data:image/") && rawImage.length > 32);
       return attachOutreachStatus(
         {
           id: String(c.id || `db-${i}`),
@@ -231,6 +239,7 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
           admin_name: String(c.admin_name || ""),
           user_name: String(c.user_name || ""),
           createdAt: String(c.created_at || c.createdAt || ""),
+          hasCardImage,
         },
         {
           emailSent: c.emailSent === true,
@@ -286,6 +295,13 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
             item.status === "failed" ? "Sync failed" : "Queued · pending sync",
           accent: "from-amber-500 to-orange-500",
           createdAt: item.created_at || "",
+          hasCardImage: Boolean(
+            item.image_base64 && String(item.image_base64).startsWith("data:image/"),
+          ),
+          queueImageDataUrl:
+            item.image_base64 && String(item.image_base64).startsWith("data:image/")
+              ? String(item.image_base64)
+              : undefined,
         });
       });
   } catch (dbErr) {

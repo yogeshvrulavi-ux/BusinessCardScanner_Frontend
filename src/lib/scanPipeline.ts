@@ -1,7 +1,8 @@
 import { emptyScanContact, type ScanContact } from "@/lib/scanResult";
 import { runBrowserOcr } from "@/lib/browserOcr";
 import { storeScanSession } from "@/lib/scanSession";
-import { isNetworkOnline } from "@/lib/connectionMode";
+import { getConnectionMode, isOfflineMode } from "@/lib/connectionMode";
+import { enhanceOfflineCameraCapture } from "@/lib/offlineCameraPreprocess";
 import { apiFetch } from "@/lib/apiFetch";
 import { API_BASE_URL } from "@/lib/api";
 
@@ -20,17 +21,36 @@ export type ScanExtractionResult = {
   ocrConfidence?: number;
 };
 
+async function prepareOcrFile(
+  file: File,
+  captureSource?: string,
+  forceBrowser = false,
+): Promise<File> {
+  const offline = forceBrowser || isOfflineMode() || getConnectionMode() === "offline";
+  if (offline && captureSource === "Camera") {
+    return enhanceOfflineCameraCapture(file);
+  }
+  return file;
+}
+
 async function runBrowserExtraction(
   file: File,
   onProgress?: (update: ScanProgress) => void,
+  captureSource?: string,
 ): Promise<ScanExtractionResult> {
   const message =
     typeof navigator !== "undefined" && !navigator.onLine
       ? "No internet — extracting on device…"
       : "Extracting contact details on device…";
 
-  onProgress?.({ progress: 25, message });
-  const result = await runBrowserOcr(file);
+  onProgress?.({ progress: 20, message });
+  if (captureSource === "Camera") {
+    onProgress?.({ progress: 30, message: "Enhancing camera capture…" });
+  }
+
+  const ocrFile = await prepareOcrFile(file, captureSource, true);
+  onProgress?.({ progress: 45, message });
+  const result = await runBrowserOcr(ocrFile);
   onProgress?.({ progress: 100, message: "Extraction complete" });
 
   return {
@@ -38,6 +58,7 @@ async function runBrowserExtraction(
     rawText: result.rawText,
     ocrWarning: result.ocrWarning,
     ocrEngine: "PaddleOCR",
+    ocrConfidence: result.ocrConfidence,
   };
 }
 
@@ -59,6 +80,7 @@ function averageConfidence(confidence: unknown): number | undefined {
 async function runOnlineExtraction(
   file: File,
   onProgress?: (update: ScanProgress) => void,
+  captureSource?: string,
 ): Promise<ScanExtractionResult> {
   onProgress?.({ progress: 20, message: "Extracting via AWS Textract…" });
 
@@ -89,24 +111,25 @@ async function runOnlineExtraction(
     };
   } catch (error) {
     console.warn("Online OCR (Textract) failed, falling back to browser OCR:", error);
-    return runBrowserExtraction(file, onProgress);
+    return runBrowserExtraction(file, onProgress, captureSource);
   }
 }
 
 /**
- * Auto-selects OCR engine based on connectivity:
+ * Auto-selects OCR engine based on effective connection mode:
  * - Online  → backend Textract (POST /api/ocr) with browser fallback.
- * - Offline → browser PaddleOCR.
+ * - Offline / Prefer Offline → browser PaddleOCR (OpenCV enhance for Camera).
  */
 export async function extractContactFromImage(
   file: File,
   onProgress?: (update: ScanProgress) => void,
+  captureSource?: string,
 ): Promise<ScanExtractionResult> {
   try {
-    if (isNetworkOnline()) {
-      return await runOnlineExtraction(file, onProgress);
+    if (!isOfflineMode() && getConnectionMode() === "online") {
+      return await runOnlineExtraction(file, onProgress, captureSource);
     }
-    return await runBrowserExtraction(file, onProgress);
+    return await runBrowserExtraction(file, onProgress, captureSource);
   } catch (err) {
     console.error("OCR pipeline failed:", err);
     onProgress?.({ progress: 100, message: "Extraction failed — enter details manually" });
@@ -124,7 +147,7 @@ export async function scanFileAndStore(
   onProgress?: (update: ScanProgress) => void,
   captureSource?: string,
 ): Promise<ScanExtractionResult> {
-  const result = await extractContactFromImage(file, onProgress);
+  const result = await extractContactFromImage(file, onProgress, captureSource);
   storeScanSession(result.contact, imageDataUrl, {
     rawText: result.rawText,
     ocrWarning: result.ocrWarning,

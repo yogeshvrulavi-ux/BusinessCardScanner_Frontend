@@ -3,7 +3,6 @@ import {
   KeyRound,
   Loader2,
   Pencil,
-  Plus,
   RefreshCw,
   Search,
   Trash2,
@@ -17,7 +16,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PageShell } from "@/components/layout/PageShell";
 import { AuthGate } from "@/components/auth/AuthGate";
-import { InviteUserModal } from "@/components/admin/InviteUserModal";
 import { EditUserModal } from "@/components/admin/EditUserModal";
 import { ResetPasswordModal } from "@/components/admin/ResetPasswordModal";
 import { useConfirmModal } from "@/components/ui/confirm-modal";
@@ -50,7 +48,6 @@ function UsersPageInner() {
   const [search, setSearch] = useState("");
 
   // Modal state
-  const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [resetUser, setResetUser] = useState<User | null>(null);
 
@@ -155,11 +152,6 @@ function UsersPageInner() {
 
   return (
     <>
-      <InviteUserModal
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onSuccess={() => void load(true)}
-      />
       <EditUserModal
         open={!!editUser}
         onOpenChange={(v) => { if (!v) setEditUser(null); }}
@@ -187,13 +179,7 @@ function UsersPageInner() {
               <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button
-              onClick={() => setCreateOpen(true)}
-              className="h-10 rounded-xl bg-gradient-primary"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Invite {isSuperAdmin ? "Admin" : "User"}
-            </Button>
+           
           </div>
         }
       >
@@ -221,15 +207,8 @@ function UsersPageInner() {
               </div>
               <h3 className="mt-4 font-display text-lg font-semibold">No users yet</h3>
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                Invite someone by email. They create their own password.
+                Users appear here after they accept an invitation and register.
               </p>
-              <Button
-                className="mt-5 rounded-xl bg-gradient-primary"
-                onClick={() => setCreateOpen(true)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Invite {isSuperAdmin ? "Admin" : "User"}
-              </Button>
             </div>
           ) : (
             <>

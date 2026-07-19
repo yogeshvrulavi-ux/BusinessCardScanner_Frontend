@@ -251,6 +251,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (identifier: string, password: string): Promise<LoginResponse> => {
     const result = await apiLogin(identifier, password);
     setAuth(result.user, result.access_token, result.refresh_token);
+    // Drain any offline queue left from a previous session once auth is ready.
+    if (typeof window !== "undefined" && navigator.onLine) {
+      void import("@/lib/autoSync").then(({ maybeAutoSyncWhenOnline }) =>
+        maybeAutoSyncWhenOnline()
+          .then((summary) => {
+            if (summary.ran && summary.queueSynced > 0) {
+              window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
+              window.dispatchEvent(new CustomEvent("cs-queue-updated"));
+            }
+          })
+          .catch(() => undefined),
+      );
+    }
     return result;
   }, [setAuth]);
 

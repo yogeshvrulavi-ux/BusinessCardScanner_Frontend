@@ -6,12 +6,17 @@ export type AutoSyncSummary = {
   ran: boolean;
   queueSynced: number;
   queueTotal: number;
+  queueRemaining: number;
 };
 
 export async function countPendingSync(): Promise<{ queue: number }> {
   const queue = await getQueueItems();
+  // Include failed items so reconnect drains the whole IndexedDB queue.
   const queuePending = queue.filter(
-    (item) => item.status === "pending" || item.status === "retrying",
+    (item) =>
+      item.status === "pending" ||
+      item.status === "retrying" ||
+      item.status === "failed",
   ).length;
   return { queue: queuePending };
 }
@@ -22,6 +27,7 @@ export async function maybeAutoSyncWhenOnline(): Promise<AutoSyncSummary> {
     ran: false,
     queueSynced: 0,
     queueTotal: 0,
+    queueRemaining: 0,
   };
 
   if (typeof navigator === "undefined" || !navigator.onLine) {
@@ -35,17 +41,26 @@ export async function maybeAutoSyncWhenOnline(): Promise<AutoSyncSummary> {
 
   const queue = await getQueueItems();
   const queuePending = queue.filter(
-    (item) => item.status === "pending" || item.status === "retrying",
+    (item) =>
+      item.status === "pending" ||
+      item.status === "retrying" ||
+      item.status === "failed",
   );
 
   if (queuePending.length === 0) {
-    return empty;
+    return { ...empty, queueRemaining: 0 };
   }
 
   const result = await syncAllQueueItems({
     skipWhatsApp: !prefs.whatsappNotificationsEnabled,
     skipEmail: !prefs.emailNotificationsEnabled,
+    includeFailed: true,
   });
 
-  return { ran: true, queueSynced: result.synced, queueTotal: result.total };
+  return {
+    ran: true,
+    queueSynced: result.synced,
+    queueTotal: result.total,
+    queueRemaining: result.remaining,
+  };
 }

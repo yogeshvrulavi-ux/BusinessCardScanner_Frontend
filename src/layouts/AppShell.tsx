@@ -69,7 +69,12 @@ export function AppShell() {
         const synced = summary.queueSynced;
         const total = summary.queueTotal;
         if (synced > 0 && showToast) {
-          toast.success(`Synced ${synced} of ${total} contact(s) to database.`);
+          const remaining = summary.queueRemaining;
+          toast.success(
+            remaining > 0
+              ? `Synced ${synced} of ${total} contact(s). ${remaining} still pending.`
+              : `Synced ${synced} contact(s) to database. Offline queue is empty.`,
+          );
         }
 
         window.dispatchEvent(new CustomEvent("cs-contacts-updated"));

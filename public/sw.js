@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cardsync-cache-v6';
+const CACHE_NAME = 'cardsync-cache-v7';
 const ASSETS_TO_CACHE = [
   '/',
   '/scan',
@@ -7,6 +7,12 @@ const ASSETS_TO_CACHE = [
   '/settings',
   '/favicon.png',
   '/logo.png',
+  '/paddleocr/models/PP-OCRv5_mobile_det_onnx_infer.tar',
+  '/paddleocr/models/PP-OCRv5_mobile_rec_onnx_infer.tar',
+  '/paddleocr/wasm/ort-wasm-simd-threaded.wasm',
+  '/paddleocr/wasm/ort-wasm-simd-threaded.mjs',
+  '/paddleocr/wasm/ort-wasm-simd-threaded.jsep.wasm',
+  '/paddleocr/wasm/ort-wasm-simd-threaded.jsep.mjs',
 ];
 
 self.addEventListener('install', (event) => {
@@ -73,20 +79,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For static assets (JS, CSS, images, fonts)
+  // Prefer cache for large OCR assets so airplane-mode scans work after install.
+  const isPaddleAsset = requestUrl.pathname.startsWith('/paddleocr/');
+
+  // For static assets (JS, CSS, images, fonts, paddleocr models/wasm)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Return cached asset immediately, but fetch updated version in background (Stale-While-Revalidate)
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, networkResponse);
-            });
-          }
-        }).catch(() => {
-          // Ignore network errors during background refresh
-        });
+        if (!isPaddleAsset) {
+          // Return cached asset immediately, but fetch updated version in background (Stale-While-Revalidate)
+          fetch(event.request).then((networkResponse) => {
+            if (networkResponse.status === 200) {
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, networkResponse);
+              });
+            }
+          }).catch(() => {
+            // Ignore network errors during background refresh
+          });
+        }
         return cachedResponse;
       }
 

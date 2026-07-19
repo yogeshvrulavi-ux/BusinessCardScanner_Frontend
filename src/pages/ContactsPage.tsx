@@ -32,6 +32,7 @@ import type { ContactStatus } from "@/lib/contactStatus";
 import { Route as ContactsRoute } from "@/routes/contacts";
 import { cn } from "@/lib/utils";
 import { ContactChannelIcons } from "@/components/contacts/ContactChannelIcons";
+import { CardThumbnail } from "@/components/contacts/CardThumbnail";
 
 export type Contact = DirectoryContact;
 
@@ -375,9 +376,13 @@ export function ContactsPage() {
                     <tr key={rowKey} id={`contact-row-${rowKey}`} className={cn("transition", isHighlighted ? "bg-primary/10 ring-2 ring-inset ring-primary/35" : "hover:bg-muted/30")}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${c.accent} text-xs font-semibold text-white`}>
-                            {c.initials}
-                          </div>
+                          <CardThumbnail
+                            contactId={c.id}
+                            hasCardImage={c.hasCardImage}
+                            queueImageDataUrl={c.queueImageDataUrl}
+                            initials={c.initials}
+                            accent={c.accent}
+                          />
                           <div>
                             <div className="font-medium">{c.name || "\u2014"}</div>
                             {c.notes && <div className="max-w-[200px] truncate text-[11px] text-muted-foreground">{c.notes}</div>}
@@ -434,9 +439,15 @@ export function ContactsPage() {
                 return (
                 <div key={rowKey} id={`contact-row-${rowKey}`} className={cn("rounded-xl border p-3 sm:p-4 transition", isHighlighted ? "border-primary/50 bg-primary/10 ring-2 ring-primary/30" : "border-border/60 bg-card/40")}>
                   <div className="flex items-start gap-3">
-                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${c.accent} text-sm font-semibold text-white`}>
-                      {c.initials}
-                    </div>
+                    <CardThumbnail
+                      contactId={c.id}
+                      hasCardImage={c.hasCardImage}
+                      queueImageDataUrl={c.queueImageDataUrl}
+                      initials={c.initials}
+                      accent={c.accent}
+                      size="md"
+                      className="rounded-xl"
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-medium">{c.name || "\u2014"}</div>
                       <div className="truncate text-xs text-muted-foreground">{c.title || "\u2014"} / {c.company || "No company"}</div>

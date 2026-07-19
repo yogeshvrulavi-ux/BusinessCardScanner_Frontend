@@ -32,6 +32,7 @@ import {
   rememberEvent,
 } from "@/lib/eventStorage";
 import { contactRowKey, type DirectoryContact, invalidateContactsDirectory } from "@/lib/contactsDirectory";
+import { CardThumbnail } from "@/components/contacts/CardThumbnail";
 import { Route as EventsRoute } from "@/routes/events";
 import { cn } from "@/lib/utils";
 
@@ -106,8 +107,19 @@ function EventContactsTable({ contacts }: { contacts: DirectoryContact[] }) {
             {contacts.map((contact) => (
               <tr key={contactRowKey(contact)} className="hover:bg-muted/30">
                 <td className="px-4 py-3">
-                  <div className="font-medium">{contact.name}</div>
-                  <div className="text-[11px] text-muted-foreground">{contact.title || "—"}</div>
+                  <div className="flex items-center gap-3">
+                    <CardThumbnail
+                      contactId={contact.id}
+                      hasCardImage={contact.hasCardImage}
+                      queueImageDataUrl={contact.queueImageDataUrl}
+                      initials={contact.initials}
+                      accent={contact.accent}
+                    />
+                    <div>
+                      <div className="font-medium">{contact.name}</div>
+                      <div className="text-[11px] text-muted-foreground">{contact.title || "—"}</div>
+                    </div>
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{contact.company || "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{contact.email || "—"}</td>
@@ -129,16 +141,29 @@ function EventContactsTable({ contacts }: { contacts: DirectoryContact[] }) {
       <div className="space-y-3 lg:hidden">
         {contacts.map((contact) => (
           <Card key={contactRowKey(contact)} className="rounded-xl border-border/60 p-4">
-            <div className="font-medium">{contact.name}</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {contact.company || "No company"} · {contact.email || "No email"}
-            </div>
-            {contact.notes ? (
-              <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">{contact.notes}</p>
-            ) : null}
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <StatusPill status={contact.status} />
-              <span className="text-xs text-muted-foreground">{contact.phone || "—"}</span>
+            <div className="flex items-start gap-3">
+              <CardThumbnail
+                contactId={contact.id}
+                hasCardImage={contact.hasCardImage}
+                queueImageDataUrl={contact.queueImageDataUrl}
+                initials={contact.initials}
+                accent={contact.accent}
+                size="md"
+                className="rounded-xl"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">{contact.name}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {contact.company || "No company"} · {contact.email || "No email"}
+                </div>
+                {contact.notes ? (
+                  <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">{contact.notes}</p>
+                ) : null}
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <StatusPill status={contact.status} />
+                  <span className="text-xs text-muted-foreground">{contact.phone || "—"}</span>
+                </div>
+              </div>
             </div>
           </Card>
         ))}

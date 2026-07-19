@@ -25,13 +25,25 @@ export type LeadPayload = {
   captureSource?: string;
 };
 
+/** Prefer a real data URL for persistence — never send blob: URLs to the API. */
+export function resolvePersistableImageDataUrl(
+  previewUrl?: string | null,
+  savedScanImage?: string | null,
+): string | undefined {
+  const candidates = [savedScanImage, previewUrl].filter(Boolean) as string[];
+  for (const candidate of candidates) {
+    if (candidate.startsWith("data:image/")) return candidate;
+  }
+  return undefined;
+}
+
 export async function resolveCardImageFile(
   file: File | null,
   previewUrl: string,
   dataUrl: string,
 ): Promise<File | null> {
   if (file) return file;
-  const src = previewUrl || dataUrl;
+  const src = resolvePersistableImageDataUrl(previewUrl, dataUrl) || previewUrl || dataUrl;
   if (!src?.startsWith("data:")) return null;
 
   const response = await fetch(src);

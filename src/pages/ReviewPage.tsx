@@ -33,7 +33,12 @@ import {
   DuplicateResolutionModal,
   type DuplicateAction,
 } from "@/components/review/DuplicateResolutionModal";
-import { buildContactBody, resolveCardImageFile, type LeadPayload } from "@/lib/cardImage";
+import {
+  buildContactBody,
+  resolveCardImageFile,
+  resolvePersistableImageDataUrl,
+  type LeadPayload,
+} from "@/lib/cardImage";
 import { isOfflineMode, getConnectionMode } from "@/lib/connectionMode";
 import { pickPrimaryEmail } from "@/lib/contactEmail";
 import {
@@ -374,16 +379,21 @@ export const ReviewPage = () => {
     applyPickerToForm(next);
   };  
 
-  const runExtraction = async (file: File) => {
+  const runExtraction = async (file: File, captureSourceOverride?: string) => {
     setIsExtracting(true);
     try {
+      const captureSource =
+        captureSourceOverride || scanMetaRef.current.captureSource || undefined;
+      if (captureSource) {
+        scanMetaRef.current = { ...scanMetaRef.current, captureSource };
+      }
       const dataUrl = await readFileAsDataUrl(file);
       setSavedScanImage(dataUrl);
       const result = await scanFileAndStore(
         file,
         dataUrl,
         undefined,
-        scanMetaRef.current.captureSource,
+        captureSource,
       );
       const { contact, ocrWarning: warning } = result;
       scanMetaRef.current = {
@@ -474,7 +484,16 @@ export const ReviewPage = () => {
     existingId?: string,
     merge = false,
   ) => {
-    const imageDataUrl = upload.previewUrl || savedScanImage || undefined;
+    // Prefer the real data URL from OCR/session. Never persist blob: object URLs.
+    let imageDataUrl = resolvePersistableImageDataUrl(upload.previewUrl, savedScanImage);
+    if (!imageDataUrl && imageFile) {
+      try {
+        imageDataUrl = await readFileAsDataUrl(imageFile);
+        setSavedScanImage(imageDataUrl);
+      } catch {
+        imageDataUrl = undefined;
+      }
+    }
     const storageUp = await checkStorageHealth();
     const label = storageLabel();
 
@@ -492,7 +511,7 @@ export const ReviewPage = () => {
                 address: payload.address || String(duplicateMatch.contact.address || ""),
               }
             : payload;
-        await updateContact(existingId, updatePayload);
+        await updateContact(existingId, updatePayload, imageDataUrl);
 
         if (!isOfflineMode() && navigator.onLine) {
           // Backend handles CRM sync transparently
@@ -668,7 +687,7 @@ export const ReviewPage = () => {
           const file = e.target.files?.[0];
           if (file) {
             upload.onFileSelect(file);
-            runExtraction(file);
+            void runExtraction(file, "Upload");
           }
         }}
       />
@@ -708,7 +727,7 @@ export const ReviewPage = () => {
                     const file = e.dataTransfer.files?.[0];
                     if (file) {
                       upload.onFileSelect(file);
-                      runExtraction(file);
+                      void runExtraction(file, "Upload");
                     }
                   }}
                   onPick={() => inputRef.current?.click()}
@@ -898,7 +917,7 @@ export const ReviewPage = () => {
         onClose={() => setCameraOpen(false)}
         onCapture={(file) => {
           upload.onFileSelect(file);
-          runExtraction(file);
+          void runExtraction(file, "Camera");
         }}
       />
 

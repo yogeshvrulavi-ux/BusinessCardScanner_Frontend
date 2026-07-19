@@ -113,9 +113,13 @@ async function saveOfflineToIndexedDbQueue(
 ): Promise<{ id: string; queued: true }> {
   const email = pickPrimaryEmail(payload);
   const appUser = await getCurrentAppUser();
+  const image =
+    cardImageBase64 && cardImageBase64.startsWith("data:image/")
+      ? cardImageBase64
+      : undefined;
   const item = buildQueueItemFromPayload(
     { ...payload, email },
-    cardImageBase64,
+    image,
     errorMessage,
     appUser,
   );
@@ -179,11 +183,34 @@ export async function syncQueueItem(
     throw new Error("No internet connection.");
   }
   const payload = queueContactToPayload(item.contact_data);
+  const image =
+    item.image_base64 && String(item.image_base64).startsWith("data:image/")
+      ? item.image_base64
+      : undefined;
+
+  // Idempotency: if this contact already exists (e.g. prior sync succeeded but queue
+  // removal failed), update instead of inserting a duplicate row.
+  try {
+    const { checkForDuplicates } = await import("@/lib/duplicateDetection");
+    const dup = await checkForDuplicates(payload);
+    const existingId = dup.duplicates[0]?.contact?.id;
+    if (existingId) {
+      await updateContact(String(existingId), payload, image);
+      await removeQueueItem(item.id);
+      const { recordQueueSyncedToDatabase } = await import("@/lib/captureSourceAnalytics");
+      recordQueueSyncedToDatabase();
+      notifyContactsListChanged();
+      return { id: String(existingId) };
+    }
+  } catch {
+    /* fall through to create */
+  }
+
   const result = await saveContactToBackend(payload, {
     connectionMode: "online",
     skipWhatsApp: options?.skipWhatsApp,
     skipEmail: options?.skipEmail,
-    cardImageBase64: item.image_base64 || undefined,
+    cardImageBase64: image,
   });
   if (payload.eventName?.trim()) {
     recordContactEventLink({
@@ -204,15 +231,27 @@ export async function syncQueueItem(
   };
 }
 
-/** Sync all pending queue items to the backend. */
+/** Sync all pending/failed queue items to the backend (failed items are retried). */
 export async function syncAllQueueItems(options?: {
   skipWhatsApp?: boolean;
   skipEmail?: boolean;
-}): Promise<{ synced: number; total: number }> {
+  includeFailed?: boolean;
+}): Promise<{ synced: number; total: number; remaining: number }> {
   const items = await getQueueItems();
-  const pending = items.filter((i) => i.status === "pending" || i.status === "retrying");
+  const includeFailed = options?.includeFailed !== false;
+  const pending = items.filter(
+    (i) =>
+      i.status === "pending" ||
+      i.status === "retrying" ||
+      (includeFailed && i.status === "failed"),
+  );
   let synced = 0;
   for (const item of pending) {
+    // Simple backoff: wait longer after repeated failures (max ~8s).
+    if (item.retry_count > 0) {
+      const delayMs = Math.min(8000, 250 * 2 ** Math.min(item.retry_count, 5));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
     try {
       await updateQueueItem({
         ...item,
@@ -224,6 +263,7 @@ export async function syncAllQueueItems(options?: {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sync failed";
       const nextRetry = item.retry_count + 1;
+      // Keep retrying on reconnect — mark failed for UI, but still include in future auto-sync.
       await updateQueueItem({
         ...item,
         status: nextRetry >= 5 ? "failed" : "pending",
@@ -233,7 +273,8 @@ export async function syncAllQueueItems(options?: {
       });
     }
   }
-  return { synced, total: pending.length };
+  const remaining = (await getQueueItems()).length;
+  return { synced, total: pending.length, remaining };
 }
 
 export async function saveContact(
@@ -259,18 +300,27 @@ export async function saveContact(
   return saveOnlineToPostgres(payload, cardImageBase64, options);
 }
 
-export async function updateContact(contactId: string, payload: LeadPayload): Promise<void> {
+export async function updateContact(
+  contactId: string,
+  payload: LeadPayload,
+  cardImageBase64?: string,
+): Promise<void> {
   const email = pickPrimaryEmail(payload);
   const nextPayload = { ...payload, email };
   const online = typeof navigator === "undefined" || navigator.onLine;
+  const image =
+    cardImageBase64 && cardImageBase64.startsWith("data:image/")
+      ? cardImageBase64
+      : undefined;
 
   if (online) {
-    await updateContactInLocalDb(contactId, nextPayload);
+    await updateContactInLocalDb(contactId, nextPayload, image);
     const existing = await getStoredContactById(contactId);
     if (existing) {
       await updateStoredContact(contactId, {
         ...(nextPayload as Record<string, unknown>),
         emailAddress: email,
+        ...(image ? { cardImageBase64: image } : {}),
       });
     }
     notifyContactsListChanged();
@@ -284,6 +334,7 @@ export async function updateContact(contactId: string, payload: LeadPayload): Pr
   await updateStoredContact(contactId, {
     ...(nextPayload as Record<string, unknown>),
     emailAddress: email,
+    ...(image ? { cardImageBase64: image } : {}),
   });
   notifyContactsListChanged();
 }
