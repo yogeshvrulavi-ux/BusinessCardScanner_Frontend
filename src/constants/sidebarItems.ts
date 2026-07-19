@@ -65,7 +65,7 @@ export const sidebarItems: SidebarItem[] = [
     title: "Analytics / Insights",
     url: "/analytics",
     icon: BarChart3,
-    roles: ["SUPER_ADMIN", "ADMIN"],
+    roles: ["SUPER_ADMIN"],
   },
   {
     title: "Invitation Management",

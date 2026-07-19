@@ -1,6 +1,6 @@
 ﻿import { Link, useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense, useState, useRef, DragEvent, useEffect, useCallback } from "react";
-import { Camera, Upload, ScanLine, Sparkles, FileImage, X, Loader2, CheckCircle2 } from "lucide-react";
+import { Camera, Upload, ScanLine, Sparkles, FileImage, X, Loader2, CheckCircle2, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/layout/PageShell";
@@ -17,6 +17,8 @@ const CameraCapture = lazy(() =>
   import("@/components/camera/CameraCapture").then((m) => ({ default: m.CameraCapture })),
 );
 
+const REMOVED_RECENT_SCANS_KEY = "cs-removed-recent-scans";
+
 export function ScanPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -31,6 +33,15 @@ export function ScanPage() {
   const [isComplete, setIsComplete] = useState(false);
   const [tipIndex, setTipIndex] = useState(0);
   const [recentContacts, setRecentContacts] = useState<any[]>([]);
+  const [removedRecentIds, setRemovedRecentIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const saved = JSON.parse(localStorage.getItem(REMOVED_RECENT_SCANS_KEY) || "[]");
+      return new Set(Array.isArray(saved) ? saved.map(String) : []);
+    } catch {
+      return new Set();
+    }
+  });
   const [connectionMode, setConnectionMode] = useState<"online" | "offline">(() =>
     typeof window !== "undefined" ? getConnectionMode() : "online",
   );
@@ -285,6 +296,19 @@ export function ScanPage() {
     await runScanPipeline(file, preview, false);
   };
 
+  const removeRecentScan = (contactId: string) => {
+    setRemovedRecentIds((current) => {
+      const next = new Set(current);
+      next.add(String(contactId));
+      localStorage.setItem(REMOVED_RECENT_SCANS_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  const visibleRecentContacts = recentContacts
+    .filter((contact) => !removedRecentIds.has(String(contact.id)))
+    .slice(0, 8);
+
   return (
     <PageShell title={PAGE.capture.title} description={PAGE.capture.description}>
       {/* Interactive greeting banner */}
@@ -487,19 +511,22 @@ export function ScanPage() {
         </Card>
       </div>
 
-      {/* Recent */}
+      {/* Recent scans are dismissible here without deleting saved contacts. */}
       <Card className="rounded-2xl border-border/60 p-5 shadow-soft">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">Recent scans</div>
+          <div>
+            <div className="text-sm font-medium">Recent Scans</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">Recently captured cards on this device.</p>
+          </div>
           <Button asChild variant="ghost" size="sm" className="rounded-lg text-xs">
             <Link to="/contacts">View all</Link>
           </Button>
         </div>
         <div className="mt-4 flex gap-3 overflow-x-auto pb-4 snap-x snap-mandatory hide-scrollbar">
-          {recentContacts.slice(0, 8).map((c) => (
+          {visibleRecentContacts.map((c) => (
             <div
               key={c.id}
-              className="min-w-[240px] sm:min-w-[200px] shrink-0 snap-center rounded-2xl border border-border/60 bg-card p-3 shadow-soft transition-transform hover:-translate-y-0.5"
+              className="min-w-[240px] shrink-0 snap-center rounded-2xl border border-border/60 bg-card p-3 shadow-soft transition-transform hover:-translate-y-0.5 sm:min-w-[200px]"
             >
               <div className={`flex aspect-[1.6/1] items-end overflow-hidden rounded-xl bg-gradient-to-br ${c.accent} p-3`}>
                 <div className="text-white">
@@ -507,10 +534,23 @@ export function ScanPage() {
                   <div className="text-[10px] opacity-80">{c.company}</div>
                 </div>
               </div>
-              <div className="mt-2 text-[11px] text-muted-foreground">{c.lastSync}</div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="truncate text-[11px] text-muted-foreground">{c.lastSync}</div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeRecentScan(String(c.id))}
+                  className="h-7 shrink-0 rounded-md px-2 text-[11px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={`Remove ${c.name || "scan"} from recent scans`}
+                >
+                  <Trash2 className="mr-1 h-3 w-3" />
+                  Remove
+                </Button>
+              </div>
             </div>
           ))}
-          {recentContacts.length === 0 && (
+          {visibleRecentContacts.length === 0 && (
             <div className="text-xs text-muted-foreground italic py-4 pl-1">No recent scans found.</div>
           )}
         </div>

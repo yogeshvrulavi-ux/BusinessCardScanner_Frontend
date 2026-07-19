@@ -106,9 +106,21 @@ const isLogoFragment = (line: string): boolean => {
   return /[a-z][A-Z]|[A-Z][a-z]+[A-Z]/.test(word);
 };
 
+/** Indian states/regions often printed on cards (service areas); never a person's name. */
+const INDIAN_REGIONS = new Set([
+  "himachal", "himachal pradesh", "rajasthan", "uttrakhand", "uttarakhand",
+  "uttar pradesh", "madhya pradesh", "andhra pradesh", "arunachal pradesh",
+  "jammu", "kashmir", "jammu kashmir", "jammu and kashmir", "jammu & kashmir",
+  "kerala", "goa", "punjab", "haryana", "bihar", "gujarat", "maharashtra",
+  "karnataka", "tamil nadu", "telangana", "west bengal", "odisha", "assam",
+  "sikkim", "ladakh", "delhi", "new delhi", "chhattisgarh", "jharkhand",
+  "manipur", "meghalaya", "mizoram", "nagaland", "tripura", "india",
+]);
+
 const isLikelyNameLine = (line: string): boolean => {
   const trimmed = line.trim();
   if (!trimmed || trimmed.length < 3 || trimmed.length > 60) return false;
+  if (INDIAN_REGIONS.has(trimmed.toLowerCase())) return false;
   if (isGarbageLine(trimmed) || isLogoFragment(trimmed)) return false;
   if (EMAIL_PATTERN.test(trimmed) || URL_PATTERN.test(trimmed) || PHONE_PATTERN.test(trimmed)) {
     return false;

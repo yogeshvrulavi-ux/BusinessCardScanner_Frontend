@@ -84,6 +84,7 @@ function AuditLogsPageInner() {
                   <th className="px-4 py-3 font-medium">When</th>
                   <th className="px-4 py-3 font-medium">Action</th>
                   <th className="px-4 py-3 font-medium">Performed By</th>
+                  <th className="px-4 py-3 font-medium">Username</th>
                   <th className="px-4 py-3 font-medium">Role</th>
                 </tr>
               </thead>
@@ -99,6 +100,9 @@ function AuditLogsPageInner() {
                       <div className="text-xs text-muted-foreground">
                         {log.actor_email || (log.user_id ? `User ${log.user_id}` : "Automated event")}
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {log.actor_username || "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {log.actor_role?.replaceAll("_", " ") || "—"}

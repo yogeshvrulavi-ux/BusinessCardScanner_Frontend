@@ -32,9 +32,29 @@ import type { ContactStatus } from "@/lib/contactStatus";
 import { Route as ContactsRoute } from "@/routes/contacts";
 import { cn } from "@/lib/utils";
 import { ContactChannelIcons } from "@/components/contacts/ContactChannelIcons";
-import { CardThumbnail } from "@/components/contacts/CardThumbnail";
+import { CardImageCell } from "@/components/contacts/CardImageCell";
 
 export type Contact = DirectoryContact;
+
+const InitialsAvatar = ({
+  initials,
+  accent = "from-indigo-500 to-violet-500",
+  className,
+}: {
+  initials?: string;
+  accent?: string;
+  className?: string;
+}) => (
+  <div
+    className={cn(
+      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br text-[11px] font-semibold text-white",
+      accent,
+      className,
+    )}
+  >
+    {initials || "?"}
+  </div>
+);
 
 const statusTabs: { key: "all" | ContactStatus; label: string }[] = [
   { key: "all", label: "All" },
@@ -84,7 +104,7 @@ export function ContactsPage() {
   const [tab, setTab] = useState<"all" | ContactStatus>("all");
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
 
   const activeFilterCount =
     (q ? 1 : 0) + (eventFilter ? 1 : 0) + (tab !== "all" ? 1 : 0);
@@ -265,60 +285,51 @@ export function ContactsPage() {
       }
     >
       <Card className="rounded-2xl border-border/60 p-3 shadow-soft sm:p-5">
-        {showFilters && (
         <div className="flex flex-col gap-3">
-          <div className="relative w-full">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, email, or event" className="h-10 w-full rounded-md border-border/60 bg-background pl-9" />
-          </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Select value={eventFilter || "all"} onValueChange={setEventFilter}>
-              <SelectTrigger className="h-10 w-full rounded-md border-border/60 bg-background sm:w-[240px]">
-                <SelectValue placeholder="Filter by event" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All events</SelectItem>
-                {eventFilterOptions.map((name) => (
-                  <SelectItem key={name} value={name}>{name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {activeFilterCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="h-10 rounded-md text-xs text-muted-foreground hover:text-foreground sm:ml-auto"
-              >
-                Clear filters
-              </Button>
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, email, or event" className="h-10 w-full rounded-md border-border/60 bg-background pl-9" />
+            </div>
+            {showFilters && (
+              <>
+                <Select value={eventFilter || "all"} onValueChange={setEventFilter}>
+                  <SelectTrigger className="h-10 w-full shrink-0 rounded-md border-border/60 bg-background sm:w-[240px]">
+                    <SelectValue placeholder="Filter by event" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All events</SelectItem>
+                    {eventFilterOptions.map((name) => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {activeFilterCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-10 shrink-0 rounded-md text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Clear filters
+                  </Button>
+                )}
+              </>
             )}
           </div>
-          <div className="w-full lg:hidden">
+          {showFilters && (
             <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="w-full">
               <TabsList className="grid h-auto w-full grid-cols-4 gap-1 rounded-xl bg-muted/60 p-1">
                 {statusTabs.map((t) => (
-                  <TabsTrigger key={t.key} value={t.key} className="flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-[10px] leading-tight data-[state=active]:bg-card data-[state=active]:shadow-soft sm:flex-row sm:text-xs">
+                  <TabsTrigger key={t.key} value={t.key} className="flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-[10px] leading-tight data-[state=active]:bg-card data-[state=active]:shadow-soft sm:flex-row sm:gap-1.5 sm:text-xs">
                     <span>{t.label}</span>
                     <span className="text-[10px] font-semibold text-muted-foreground">{counts[t.key]}</span>
                   </TabsTrigger>
                 ))}
               </TabsList>
             </Tabs>
-          </div>
-          <div className="hidden w-full overflow-x-auto hide-scrollbar pb-1 lg:block">
-            <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="w-full min-w-max">
-              <TabsList className="rounded-xl bg-muted/60">
-                {statusTabs.map((t) => (
-                  <TabsTrigger key={t.key} value={t.key} className="rounded-lg text-xs data-[state=active]:bg-card data-[state=active]:shadow-soft">
-                    {t.label} <span className="ml-1.5 text-[10px] text-muted-foreground">{counts[t.key]}</span>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </div>
+          )}
         </div>
-        )}
 
         {showInitialLoading ? (
           <div className="mt-8 flex flex-col items-center justify-center py-12 text-center">
@@ -350,6 +361,7 @@ export function ContactsPage() {
                 <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-medium">Contact Name</th>
+                    <th className="px-4 py-3 font-medium">Card</th>
                     <th className="px-4 py-3 font-medium">Company</th>
                     <th className="px-4 py-3 font-medium">Designation</th>
                     <th className="px-4 py-3 font-medium">Email</th>
@@ -376,18 +388,21 @@ export function ContactsPage() {
                     <tr key={rowKey} id={`contact-row-${rowKey}`} className={cn("transition", isHighlighted ? "bg-primary/10 ring-2 ring-inset ring-primary/35" : "hover:bg-muted/30")}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <CardThumbnail
-                            contactId={c.id}
-                            hasCardImage={c.hasCardImage}
-                            queueImageDataUrl={c.queueImageDataUrl}
-                            initials={c.initials}
-                            accent={c.accent}
-                          />
+                          <InitialsAvatar initials={c.initials} accent={c.accent} />
                           <div>
                             <div className="font-medium">{c.name || "\u2014"}</div>
                             {c.notes && <div className="max-w-[200px] truncate text-[11px] text-muted-foreground">{c.notes}</div>}
                           </div>
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <CardImageCell
+                          contactId={c.id}
+                          hasCardImage={c.hasCardImage}
+                          queueImageDataUrl={c.queueImageDataUrl}
+                          contactName={c.name}
+                          capturedBy={c.user_name}
+                        />
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{c.company || "\u2014"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{c.title || "\u2014"}</td>
@@ -439,14 +454,10 @@ export function ContactsPage() {
                 return (
                 <div key={rowKey} id={`contact-row-${rowKey}`} className={cn("rounded-xl border p-3 sm:p-4 transition", isHighlighted ? "border-primary/50 bg-primary/10 ring-2 ring-primary/30" : "border-border/60 bg-card/40")}>
                   <div className="flex items-start gap-3">
-                    <CardThumbnail
-                      contactId={c.id}
-                      hasCardImage={c.hasCardImage}
-                      queueImageDataUrl={c.queueImageDataUrl}
+                    <InitialsAvatar
                       initials={c.initials}
                       accent={c.accent}
-                      size="md"
-                      className="rounded-xl"
+                      className="h-12 w-12 rounded-xl text-xs"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-medium">{c.name || "\u2014"}</div>
@@ -462,6 +473,14 @@ export function ContactsPage() {
                       {c.eventName && <div className="mt-0.5 truncate text-[11px] text-primary/90">Event: {c.eventName}</div>}
                       <div className="mt-0.5 text-[11px] text-muted-foreground">{formatDate(c.createdAt)}</div>
                     </div>
+                    <CardImageCell
+                      contactId={c.id}
+                      hasCardImage={c.hasCardImage}
+                      queueImageDataUrl={c.queueImageDataUrl}
+                      contactName={c.name}
+                      capturedBy={c.user_name}
+                      className="self-start"
+                    />
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
                     <StatusPill status={c.status} />

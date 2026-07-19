@@ -45,7 +45,7 @@ type AnalyticsSummary = {
 
 export function InsightsPage() {
   return (
-    <AuthGate allowedRoles={["SUPER_ADMIN", "ADMIN"]}>
+    <AuthGate allowedRoles={["SUPER_ADMIN"]}>
       <InsightsPageInner />
     </AuthGate>
   );

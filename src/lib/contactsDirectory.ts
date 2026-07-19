@@ -30,6 +30,8 @@ export type DirectoryContact = {
   accent: string;
   admin_name?: string;
   user_name?: string;
+  /** Login username of the user who captured this contact. */
+  user_username?: string;
   createdAt?: string;
   /** True when PostgreSQL has a stored card image (served via /card-image). */
   hasCardImage?: boolean;
@@ -238,6 +240,7 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
           lastSync: status === "synced" ? String(c.lastSync || c.created_at || "Synced") : String(c.lastSync || ""),
           admin_name: String(c.admin_name || ""),
           user_name: String(c.user_name || ""),
+          user_username: String(c.user_username || ""),
           createdAt: String(c.created_at || c.createdAt || ""),
           hasCardImage,
         },

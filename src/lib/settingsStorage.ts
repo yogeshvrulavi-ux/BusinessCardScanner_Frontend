@@ -25,8 +25,8 @@ export type UserSettings = {
 };
 
 const STORAGE_KEY = "cs-user-settings";
-/** One-time migration: enable WhatsApp follow-ups for existing installs. */
-const WHATSAPP_ENABLE_MIGRATION_KEY = "cs-whatsapp-enabled-v3";
+/** One-time reset so existing browsers adopt the new outreach-off defaults. */
+const OUTREACH_DEFAULTS_OFF_MIGRATION_KEY = "cs-outreach-defaults-off-v1";
 
 export const TIMEZONE_OPTIONS = [
   "Pacific Time (US)",
@@ -50,8 +50,8 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   notificationsEnabled: true,
   queueNotificationsEnabled: true,
   captureNotificationsEnabled: true,
-  emailNotificationsEnabled: true,
-  whatsappNotificationsEnabled: true,
+  emailNotificationsEnabled: false,
+  whatsappNotificationsEnabled: false,
   cookiesAccepted: false,
   analyticsCookiesEnabled: false,
   autoSyncQueueWhenOnline: true,
@@ -67,29 +67,31 @@ export function loadUserSettings(): UserSettings {
 
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_USER_SETTINGS };
+    if (!raw) {
+      localStorage.setItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY, "1");
+      return { ...DEFAULT_USER_SETTINGS };
+    }
     const parsed = JSON.parse(raw) as Partial<UserSettings>;
     const autoSyncQueueWhenOnline =
       parsed.autoSyncQueueWhenOnline ??
       DEFAULT_USER_SETTINGS.autoSyncQueueWhenOnline;
-
-    const needsWhatsappMigration = !localStorage.getItem(WHATSAPP_ENABLE_MIGRATION_KEY);
-    const whatsappNotificationsEnabled = needsWhatsappMigration
-      ? true
-      : parsed.whatsappNotificationsEnabled !== false;
-
-    if (needsWhatsappMigration) {
-      localStorage.setItem(WHATSAPP_ENABLE_MIGRATION_KEY, "1");
-    }
+    const needsOutreachDefaultsMigration =
+      !localStorage.getItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY);
 
     const merged = {
       ...DEFAULT_USER_SETTINGS,
       ...parsed,
       autoSyncQueueWhenOnline,
-      whatsappNotificationsEnabled,
+      ...(needsOutreachDefaultsMigration
+        ? {
+            emailNotificationsEnabled: false,
+            whatsappNotificationsEnabled: false,
+          }
+        : {}),
     };
-    if (needsWhatsappMigration) {
+    if (needsOutreachDefaultsMigration) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      localStorage.setItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY, "1");
     }
     return merged;
   } catch {

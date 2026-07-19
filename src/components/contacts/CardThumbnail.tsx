@@ -3,10 +3,13 @@ import { API_BASE_URL } from "@/lib/api";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/utils";
 
-type CardThumbnailProps = {
+type CardImageSource = {
   contactId: string;
   hasCardImage?: boolean;
   queueImageDataUrl?: string;
+};
+
+type CardThumbnailProps = CardImageSource & {
   initials?: string;
   accent?: string;
   className?: string;
@@ -14,18 +17,10 @@ type CardThumbnailProps = {
 };
 
 /**
- * Auth-aware card image thumbnail. Uses the dedicated /card-image endpoint
+ * Auth-aware card image loader. Uses the dedicated /card-image endpoint
  * (or a queued data URL) so list payloads do not need full base64 blobs.
  */
-export function CardThumbnail({
-  contactId,
-  hasCardImage,
-  queueImageDataUrl,
-  initials = "?",
-  accent = "from-indigo-500 to-violet-500",
-  className,
-  size = "sm",
-}: CardThumbnailProps) {
+export function useCardImage({ contactId, hasCardImage, queueImageDataUrl }: CardImageSource) {
   const [src, setSrc] = useState<string | null>(
     queueImageDataUrl?.startsWith("data:image/") ? queueImageDataUrl : null,
   );
@@ -69,9 +64,23 @@ export function CardThumbnail({
     };
   }, [contactId, hasCardImage, queueImageDataUrl]);
 
+  return { src: failed ? null : src, markFailed: () => setFailed(true) };
+}
+
+export function CardThumbnail({
+  contactId,
+  hasCardImage,
+  queueImageDataUrl,
+  initials = "?",
+  accent = "from-indigo-500 to-violet-500",
+  className,
+  size = "sm",
+}: CardThumbnailProps) {
+  const { src, markFailed } = useCardImage({ contactId, hasCardImage, queueImageDataUrl });
+
   const sizeClass = size === "md" ? "h-12 w-12" : "h-9 w-9";
 
-  if (src && !failed) {
+  if (src) {
     return (
       <img
         src={src}
@@ -81,7 +90,7 @@ export function CardThumbnail({
           "shrink-0 rounded-lg object-cover ring-1 ring-border/60",
           className,
         )}
-        onError={() => setFailed(true)}
+        onError={markFailed}
       />
     );
   }
