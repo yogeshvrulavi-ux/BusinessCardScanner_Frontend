@@ -15,8 +15,23 @@ const COMPANY_SUFFIX_REGEX =
   /\b(?:inc|llc|ltd|corp|corporation|company|group|solutions|technologies|studios|labs|partners|consulting|consultants|pvt|private|limited|llp|plc|gmbh|sa|ag)\b/i;
 const DESIGNATION_KEYWORDS =
   /\b(?:CEO|CTO|CFO|COO|CMO|Founder|President|Director|Manager|Engineer|Developer|Designer|Consultant|Architect|Specialist|Coordinator|Executive|Lead|Head|VP|Vice President|Partner|Principal|Officer|Associate|Analyst|Business Consultant)\b/i;
-const ADDRESS_KEYWORDS =
-  /\b(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd|suite|ste|floor|fl|building|bldg|place|pl|court|ct|parkway|pkwy|square|sq|sector|gurugram|gurgaon|mumbai|delhi|bengaluru|bangalore|hyderabad|chennai|kolkata|pune|india|pin|postal|zip)\b/i;
+/** Street / plot / locality tokens that strongly signal an address line. */
+const ADDRESS_STREET_KEYWORDS =
+  /\b(?:street|st\.?|avenue|ave\.?|boulevard|blvd\.?|road|rd\.?|drive|drv\.?|dr\.?|lane|ln\.?|suite|ste\.?|floor|fl\.?|building|bldg\.?|block|plot|plt\.?|sector|phase|layout|nagar|colony|tower|complex|mouza|place|pl\.?|court|ct\.?|parkway|pkwy\.?|square|sq\.?|house\s*no\.?|h\.?\s*no\.?|door\s*no\.?|p\.?\s*o\.?\s*box|post\s*office)\b/i;
+
+/** Cities / states often printed on Indian cards (weak alone; strong with digits/commas). */
+const ADDRESS_PLACE_KEYWORDS =
+  /\b(?:mumbai|delhi|bengaluru|bangalore|hyderabad|chennai|kolkata|pune|gurugram|gurgaon|noida|ahmedabad|jaipur|kochi|cochin|coimbatore|varanasi|bhubaneswar|cuttack|puri|odisha|orissa|ernakulam|alappuzha|alleppey|thrissur|trivandrum|thiruvananthapuram|calicut|kozhikode|mangalore|mysore|indore|bhopal|lucknow|kanpur|patna|ranchi|raipur|surat|vadodara|nagpur|nashik|chandigarh|amritsar|ludhiana|udaipur|jodhpur|guwahati|shillong|imphal|agartala|gangtok|shimla|dehradun|haridwar|rishikesh|goa|panaji|kerala|tamil\s*nadu|karnataka|maharashtra|gujarat|rajasthan|punjab|haryana|bihar|west\s*bengal|uttar\s*pradesh|madhya\s*pradesh|telangana|andhra\s*pradesh|india|u\.?\s*p\.?)\b/i;
+
+const ADDRESS_PREFIX_PATTERN =
+  /^(?:address|add(?:ress)?|location|loc)\s*[:\-.]?\s*/i;
+
+/** Marketing / affiliation lines that mention India/Odisha but are not addresses. */
+const ADDRESS_FALSE_POSITIVE =
+  /\b(?:ministry|tourism|govt\.?|government|recognized|recognised|wholesale|partner|dream|magical|exploring|creating|memories|passion|journey|trusted|b2b|dmc\s+of|since\s+\d{4}|tour|tours?|trekking|adventure|holidays?|vacations?|explore\s+more|live\s+more|24\s*x\s*7|support\s*no|whatsapp)\b/i;
+
+const ADDRESS_BRAND_NOISE =
+  /\b(?:pvt\.?|ltd\.?|limited|llp|dmc|travels?|hotels?|vacations?|holidays?|tours?|adventure|solutions|technologies|private)\b/i;
 
 const GENERIC_EMAIL_DOMAINS = new Set([
   "gmail",
@@ -63,7 +78,7 @@ function sanitizeUrl(value: string): string {
 function sanitizeAddress(value: string): string {
   return value
     .split("\n")
-    .map(stripOcrJunkSymbols)
+    .map((line) => stripOcrJunkSymbols(line.replace(ADDRESS_PREFIX_PATTERN, "")))
     .filter(Boolean)
     .join("\n");
 }
@@ -161,10 +176,23 @@ const extractPhones = (text: string, lines: string[]) => {
     .map(normalizePhone)
     .filter((candidate) => {
       const digits = candidate.replace(/[^\d]/g, "");
-      return digits.length >= 7 && digits.length <= 15;
+      if (digits.length < 7 || digits.length > 15) return false;
+      // Avoid treating Indian PIN codes / short plot numbers as phones.
+      if (digits.length === 6) return false;
+      if (digits.length < 8) return false;
+      return true;
     });
 
   const remaining = lines.filter((line) => {
+    // Keep address lines intact even if they contain digit sequences.
+    if (
+      ADDRESS_STREET_KEYWORDS.test(line) ||
+      ADDRESS_HOUSE_NO.test(line) ||
+      ADDRESS_PIN_CODE.test(line) ||
+      (ADDRESS_PLACE_KEYWORDS.test(line) && (line.includes(",") || /-\s*\d{6}\b/.test(line)))
+    ) {
+      return !isGarbageLine(line);
+    }
     let stripped = line;
     for (const phone of phones) {
       stripped = stripped.replace(phone, "").replace(/\d{7,}/g, "").trim();
@@ -198,13 +226,91 @@ const extractSocialLinks = (lines: string[]) => {
   return { socialLinks, remaining };
 };
 
-// US zip (5 or 5+4) or Indian 6-digit PIN code.
-const ADDRESS_PIN_CODE = /\b\d{5}(?:-\d{4})?\b|\b\d{6}\b/;
+// US zip (5 or 5+4), Indian 6-digit PIN, Pin-221002, City-751030.
+const ADDRESS_PIN_CODE =
+  /(?:\b(?:pin|pincode|pin\s*code|postal|zip)\b\s*[:.\-]?\s*)?\b\d{5}(?:-\d{4})?\b|(?:\b(?:pin|pincode|pin\s*code|postal|zip)\b\s*[:.\-]?\s*)?\b\d{6}\b|\b[A-Za-z][A-Za-z.\s]{1,28}-\s*\d{6}\b/i;
 
-const isAddressLine = (line: string): boolean =>
-  ADDRESS_KEYWORDS.test(line) ||
-  ADDRESS_PIN_CODE.test(line) ||
-  (/\d{2,5}/.test(line) && line.includes(","));
+/** Plot / door / house numbers common on Indian cards (19/526 B, B-2/12, Plot-1215/1400). */
+const ADDRESS_HOUSE_NO =
+  /(?:\b(?:plot|plt|house|h\.?\s*no\.?|door\s*no\.?|plot\s*no\.?)\b[\s.:#-]*)\d|(?:^\s*(?:no\.?|#)\s*[:.]?\s*\d)|(?:^\s*\d{1,4}\s*\/\s*\d+)|(?:^\s*[A-Za-z]?\d[\w./\s-]*,)/i;
+
+const isAddressExcludedLine = (line: string): boolean => {
+  if (EMAIL_PATTERN.test(line) || URL_PATTERN.test(line)) return true;
+  // Service-area footers: "Varanasi | Prayagraj | Ayodhya"
+  if ((line.match(/\|/g) || []).length >= 1 && ADDRESS_PLACE_KEYWORDS.test(line) && !ADDRESS_HOUSE_NO.test(line)) {
+    return true;
+  }
+  if (DESIGNATION_KEYWORDS.test(line)) return true;
+  if (
+    COMPANY_SUFFIX_REGEX.test(line) &&
+    !ADDRESS_HOUSE_NO.test(line) &&
+    !ADDRESS_PIN_CODE.test(line)
+  ) {
+    return true;
+  }
+  if (
+    ADDRESS_BRAND_NOISE.test(line) &&
+    !ADDRESS_HOUSE_NO.test(line) &&
+    !ADDRESS_PIN_CODE.test(line) &&
+    !ADDRESS_STREET_KEYWORDS.test(line)
+  ) {
+    return true;
+  }
+  if (ADDRESS_FALSE_POSITIVE.test(line) && !ADDRESS_HOUSE_NO.test(line) && !ADDRESS_PIN_CODE.test(line)) {
+    return true;
+  }
+  if (/^(?:id|email|e-?mail|web|www|mobile|phone|tel)\s*:?\s*$/i.test(line)) return true;
+  return false;
+};
+
+/** Strong address signal — enough to seed a block on its own. */
+const isStrongAddressLine = (line: string): boolean => {
+  if (!line || line.length < 4 || isAddressExcludedLine(line)) return false;
+  if (ADDRESS_STREET_KEYWORDS.test(line)) return true;
+  if (ADDRESS_HOUSE_NO.test(line)) return true;
+  if (ADDRESS_PIN_CODE.test(line)) return true;
+  // Digit-led plot/house rows with commas: "19/ 526 B, Pynadathu, ..."
+  if (line.length > 5 && /^\s*[\dA-Za-z]/.test(line) && /\d/.test(line) && line.includes(",")) {
+    return true;
+  }
+  return false;
+};
+
+/** Weak place line — city/locality blocks, including landmark-style cards without PIN. */
+const isWeakAddressLine = (line: string): boolean => {
+  if (!line || line.length < 4 || isAddressExcludedLine(line)) return false;
+  if (isStrongAddressLine(line)) return true;
+  if (!ADDRESS_PLACE_KEYWORDS.test(line)) return false;
+  if (line === line.toUpperCase() && line.trim().split(/\s+/).length <= 3 && !/\d/.test(line) && !line.includes(",")) {
+    return false;
+  }
+  return /\d/.test(line) || line.includes(",") || line.trim().split(/\s+/).length >= 2;
+};
+
+/** Short locality / landmark lines that can sit inside a multi-line address block. */
+const isAddressContinuation = (line: string): boolean => {
+  if (!line || line.length < 3 || line.length > 80) return false;
+  if (isAddressExcludedLine(line) || isGarbageLine(line)) return false;
+  if (isStrongAddressLine(line) || isWeakAddressLine(line)) return true;
+  const words = line.trim().split(/\s+/);
+  if (words.length > 8) return false;
+  if (isLikelyNameLine(line) && words.length <= 3) return false;
+  return /^[A-Za-z0-9]/.test(line) && !DESIGNATION_KEYWORDS.test(line);
+};
+
+const scoreAddressBlock = (block: string): number => {
+  let score = 0;
+  for (const line of block.split("\n")) {
+    if (ADDRESS_PIN_CODE.test(line)) score += 50;
+    if (ADDRESS_HOUSE_NO.test(line)) score += 40;
+    if (ADDRESS_STREET_KEYWORDS.test(line)) score += 30;
+    if (ADDRESS_PLACE_KEYWORDS.test(line)) score += 10;
+    if (line.includes(",")) score += 5;
+    if (ADDRESS_BRAND_NOISE.test(line)) score -= 25;
+  }
+  score += Math.min(20, block.split("\n").length * 5);
+  return score;
+};
 
 /**
  * Group consecutive address lines into complete multi-line address blocks so
@@ -212,37 +318,91 @@ const isAddressLine = (line: string): boolean =>
  */
 const extractAddress = (lines: string[]) => {
   const usable = lines.filter((line) => !isGarbageLine(line));
-  const matches = usable.map(isAddressLine);
+  const strong = usable.map(isStrongAddressLine);
+  const weak = usable.map(isWeakAddressLine);
 
-  // Sandwich rule: a short connector line between two address lines belongs to the block.
-  const include = [...matches];
+  const include = usable.map((_, idx) => strong[idx] || weak[idx]);
+
+  // Fill gaps between two address seeds (landmark / locality middle lines).
+  const seedIdxs = include.map((flag, idx) => (flag ? idx : -1)).filter((idx) => idx >= 0);
+  for (let idx = 0; idx < usable.length; idx += 1) {
+    if (include[idx]) continue;
+    const left = [...seedIdxs].reverse().find((j) => j < idx);
+    const right = seedIdxs.find((j) => j > idx);
+    if (left === undefined || right === undefined || right - left > 4) continue;
+    if (isAddressExcludedLine(usable[idx])) continue;
+    include[idx] = true;
+  }
+
+  // Sandwich rule: a short connector between two address lines belongs to the block.
   for (let idx = 1; idx < usable.length - 1; idx += 1) {
-    if (!include[idx] && include[idx - 1] && matches[idx + 1] && usable[idx].length <= 60) {
+    if (
+      !include[idx] &&
+      include[idx - 1] &&
+      (include[idx + 1] || strong[idx + 1] || weak[idx + 1]) &&
+      usable[idx].length <= 70 &&
+      isAddressContinuation(usable[idx])
+    ) {
       include[idx] = true;
+    }
+  }
+
+  // Expand from seeds to adjacent continuation / weak place lines (landmark blocks).
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let idx = 0; idx < usable.length; idx += 1) {
+      if (include[idx]) continue;
+      const prev = idx > 0 && include[idx - 1];
+      const next = idx < usable.length - 1 && include[idx + 1];
+      if (!(prev || next)) continue;
+      if (strong[idx] || weak[idx] || isAddressContinuation(usable[idx])) {
+        if (isLikelyNameLine(usable[idx]) && !(prev && next) && !weak[idx] && !strong[idx]) {
+          continue;
+        }
+        include[idx] = true;
+        changed = true;
+      }
     }
   }
 
   const addressBlocks: string[] = [];
   const remaining: string[] = [];
   let currentBlock: string[] = [];
+  let currentHasSignal = false;
+
+  const lineHasAddressSignal = (line: string): boolean =>
+    ADDRESS_STREET_KEYWORDS.test(line) ||
+    ADDRESS_HOUSE_NO.test(line) ||
+    ADDRESS_PIN_CODE.test(line) ||
+    (ADDRESS_PLACE_KEYWORDS.test(line) && !ADDRESS_FALSE_POSITIVE.test(line));
+
+  const flush = () => {
+    if (currentBlock.length === 0) return;
+    if (currentHasSignal || currentBlock.some(lineHasAddressSignal)) {
+      addressBlocks.push(
+        currentBlock.map((line) => line.replace(ADDRESS_PREFIX_PATTERN, "").trim()).filter(Boolean).join("\n"),
+      );
+    } else {
+      remaining.push(...currentBlock);
+    }
+    currentBlock = [];
+    currentHasSignal = false;
+  };
 
   usable.forEach((line, idx) => {
     if (include[idx]) {
       currentBlock.push(line);
+      if (strong[idx] || lineHasAddressSignal(line)) currentHasSignal = true;
     } else {
-      if (currentBlock.length > 0) {
-        addressBlocks.push(currentBlock.join("\n"));
-        currentBlock = [];
-      }
+      flush();
       remaining.push(line);
     }
   });
+  flush();
 
-  if (currentBlock.length > 0) {
-    addressBlocks.push(currentBlock.join("\n"));
-  }
-
-  return { addresses: uniqueItems(addressBlocks), remaining };
+  addressBlocks.sort((a, b) => scoreAddressBlock(b) - scoreAddressBlock(a));
+  return { addresses: uniqueItems(addressBlocks.filter(Boolean)), remaining };
 };
 
 const extractNameAndDesignation = (lines: string[]) => {

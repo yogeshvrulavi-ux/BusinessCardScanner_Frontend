@@ -8,6 +8,8 @@ export default defineConfig(({ mode, command }) => {
   // vite.config runs before import.meta.env; load .env explicitly
   const env = loadEnv(mode, process.cwd(), "");
   const apiTarget = (env.VITE_API_URL || process.env.VITE_API_URL || "").trim();
+  // Amplify static hosting has no Node SSR runtime — build a prerendered SPA shell.
+  const isAmplifyBuild = !!process.env.AMPLIFY;
 
   // Dev server proxy needs a backend target. Production build does not use the proxy,
   // but the client still needs VITE_API_URL baked in via loadEnv / Amplify env.
@@ -62,6 +64,11 @@ export default defineConfig(({ mode, command }) => {
         "motion-utils",
       ],
     },
-    plugins: [tsConfigPaths(), tailwindcss(), tanstackStart(), react()],
+    plugins: [
+      tsConfigPaths(),
+      tailwindcss(),
+      tanstackStart(isAmplifyBuild ? { spa: { enabled: true } } : undefined),
+      react(),
+    ],
   };
 });
