@@ -1,15 +1,13 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { lazy, Suspense, useState, useRef, DragEvent, useEffect, useCallback } from "react";
+import { lazy, Suspense, useState, useRef, DragEvent, useMemo } from "react";
 import { Camera, Upload, ScanLine, Sparkles, FileImage, X, Loader2, CheckCircle2, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/layout/PageShell";
 import { PAGE } from "@/constants/navigation";
-import { listContacts } from "@/lib/contactStorage";
-import { CONNECTION_MODE_CHANGED, getConnectionMode } from "@/lib/connectionMode";
 import { useUserSettings } from "@/hooks/useUserSettings";
+import { useContactsDirectory } from "@/hooks/useContactsDirectory";
 import { loadUserSettings } from "@/lib/settingsStorage";
-import { getQueueItems, getCachedContacts, cacheContacts } from "@/lib/indexeddb";
 import { isValidCardImage, readFileAsDataUrl } from "@/lib/scanSession";
 import { toast } from "sonner";
 
@@ -18,6 +16,13 @@ const CameraCapture = lazy(() =>
 );
 
 const REMOVED_RECENT_SCANS_KEY = "cs-removed-recent-scans";
+const RECENT_SCANS_LIMIT = 5;
+
+function contactRecencyMs(createdAt?: string): number {
+  if (!createdAt) return 0;
+  const ms = Date.parse(createdAt);
+  return Number.isFinite(ms) ? ms : 0;
+}
 
 export function ScanPage() {
   const navigate = useNavigate();
@@ -32,7 +37,8 @@ export function ScanPage() {
   const [error, setError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [tipIndex, setTipIndex] = useState(0);
-  const [recentContacts, setRecentContacts] = useState<any[]>([]);
+  // Same role-scoped directory as Contacts (USER / ADMIN / SUPER_ADMIN).
+  const { contacts: directoryContacts } = useContactsDirectory();
   const [removedRecentIds, setRemovedRecentIds] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
@@ -42,100 +48,7 @@ export function ScanPage() {
       return new Set();
     }
   });
-  const [connectionMode, setConnectionMode] = useState<"online" | "offline">(() =>
-    typeof window !== "undefined" ? getConnectionMode() : "online",
-  );
   const { firstName, settings } = useUserSettings();
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const refreshMode = () => setConnectionMode(getConnectionMode());
-
-    window.addEventListener("online", refreshMode);
-    window.addEventListener("offline", refreshMode);
-    window.addEventListener(CONNECTION_MODE_CHANGED, refreshMode);
-    return () => {
-      window.removeEventListener("online", refreshMode);
-      window.removeEventListener("offline", refreshMode);
-      window.removeEventListener(CONNECTION_MODE_CHANGED, refreshMode);
-    };
-  }, []);
-
-  const formatRecentList = useCallback((contactsData: any[], queueItems: Awaited<ReturnType<typeof getQueueItems>>) => {
-    const accents = [
-      "from-cyan-500 to-teal-500",
-      "from-sky-500 to-indigo-500",
-      "from-emerald-500 to-teal-500",
-      "from-amber-500 to-orange-500",
-      "from-fuchsia-500 to-pink-500",
-      "from-cyan-500 to-blue-500",
-    ];
-    const queuedContacts = queueItems.map((item) => ({
-      ...item.contact_data,
-      id: item.id,
-      accent: "from-amber-500 to-orange-500",
-      lastSync: item.status === "failed" ? "Sync failed" : "Pending sync",
-    }));
-    const merged = [...queuedContacts, ...contactsData];
-    const visible = merged.filter((c: any) => {
-      const name = typeof c.name === "string" ? c.name.trim() : "";
-      return name !== "Vikram Merita";
-    });
-    return visible.map((c: any, i: number) => ({
-      ...c,
-      accent: c.accent || accents[i % accents.length],
-      lastSync: c.lastSync || "Just now",
-    }));
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const fetchRecent = async () => {
-      let contactsData: any[] = [];
-
-      try {
-        const cached = await getCachedContacts();
-        if (!cancelled && cached.length > 0) {
-          const queueItems = await getQueueItems();
-          setRecentContacts(formatRecentList(cached, queueItems));
-        }
-      } catch {
-        /* cache optional */
-      }
-
-      try {
-        contactsData = await listContacts();
-        if (contactsData.length > 0) {
-          await cacheContacts(contactsData);
-        }
-      } catch {
-        contactsData = await getCachedContacts();
-      }
-
-      if (contactsData.length === 0) {
-        try {
-          contactsData = await getCachedContacts();
-        } catch {
-          contactsData = [];
-        }
-      }
-
-      try {
-        const queueItems = await getQueueItems();
-        if (!cancelled) {
-          setRecentContacts(formatRecentList(contactsData, queueItems));
-        }
-      } catch (e) {
-        console.error("Failed to fetch recent scans from IndexedDB:", e);
-      }
-    };
-    void fetchRecent();
-    return () => {
-      cancelled = true;
-    };
-  }, [connectionMode, formatRecentList]);
 
   const tips = [
     "Place cards on a flat, high-contrast background for best results.",
@@ -305,9 +218,12 @@ export function ScanPage() {
     });
   };
 
-  const visibleRecentContacts = recentContacts
-    .filter((contact) => !removedRecentIds.has(String(contact.id)))
-    .slice(0, 8);
+  const visibleRecentContacts = useMemo(() => {
+    return [...directoryContacts]
+      .filter((contact) => !removedRecentIds.has(String(contact.id)))
+      .sort((a, b) => contactRecencyMs(b.createdAt) - contactRecencyMs(a.createdAt))
+      .slice(0, RECENT_SCANS_LIMIT);
+  }, [directoryContacts, removedRecentIds]);
 
   return (
     <PageShell title={PAGE.capture.title} description={PAGE.capture.description}>
@@ -516,7 +432,9 @@ export function ScanPage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-medium">Recent Scans</div>
-            <p className="mt-0.5 text-xs text-muted-foreground">Recently captured cards on this device.</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Latest {RECENT_SCANS_LIMIT} contacts from your directory.
+            </p>
           </div>
           <Button asChild variant="ghost" size="sm" className="rounded-lg text-xs">
             <Link to="/contacts">View all</Link>
