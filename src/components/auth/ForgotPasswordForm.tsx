@@ -141,7 +141,7 @@ export function ForgotPasswordForm() {
                   <InputOTPSlot
                     key={index}
                     index={index}
-                    className="h-11 w-11 rounded-xl border-slate-200 text-base"
+                    className="h-11 w-11 rounded-md border-slate-200 text-base"
                   />
                 ))}
               </InputOTPGroup>
@@ -160,7 +160,7 @@ export function ForgotPasswordForm() {
             trailing={
               <button
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
@@ -179,7 +179,7 @@ export function ForgotPasswordForm() {
             trailing={
               <button
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 onClick={() => setShowConfirm((v) => !v)}
                 aria-label={showConfirm ? "Hide password" : "Show password"}
               >

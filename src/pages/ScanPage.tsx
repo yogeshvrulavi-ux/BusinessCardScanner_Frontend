@@ -98,7 +98,7 @@ export function ScanPage() {
     return true;
   };
 
-  /** Upload icon flow: pick from local folder ? OCR as-is ? review */
+  /** Upload icon flow: pick from local folder, OCR as-is, then review */
   const handleUploadFromFolder = async (selectedFile: File) => {
     if (!processFile(selectedFile)) return;
     try {
@@ -111,7 +111,7 @@ export function ScanPage() {
     }
   };
 
-  /** Camera icon flow: capture ? OCR as-is ? review (camera stays open until Continue) */
+  /** Camera icon flow: capture, OCR as-is, then review (camera stays open until Continue) */
   const handleCameraCapture = async (capturedFile: File) => {
     setCameraOpen(false);
     if (!processFile(capturedFile)) return;
@@ -143,7 +143,7 @@ export function ScanPage() {
       const captureToasts =
         prefs.notificationsEnabled && prefs.captureNotificationsEnabled;
       if (captureToasts) {
-        toast.info("Extracting contact details from card�");
+        toast.info("Extracting contact details from card...");
       }
       const { scanFileAndStore } = await import("@/lib/scanPipeline");
       await scanFileAndStore(
@@ -289,7 +289,7 @@ export function ScanPage() {
                   <img src={preview} alt="Card preview" className="w-full h-auto max-h-[160px] object-cover" />
                   {!isProcessing && !isComplete && (
                     <div className="absolute top-2 right-2">
-                      <Button variant="secondary" size="icon" className="h-7 w-7 rounded-full bg-background/80 hover:bg-background backdrop-blur shadow-soft text-foreground" onClick={clearFile}>
+                      <Button variant="secondary" size="icon" className="h-7 w-7 rounded-md bg-background/80 hover:bg-background backdrop-blur shadow-soft text-foreground" onClick={clearFile}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -357,7 +357,7 @@ export function ScanPage() {
 
           <div className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            AI extracts contact details automatically � powered by on-device OCR
+            AI extracts contact details automatically, powered by on-device OCR
           </div>
         </Card>
 
@@ -436,7 +436,7 @@ export function ScanPage() {
               Latest {RECENT_SCANS_LIMIT} contacts from your directory.
             </p>
           </div>
-          <Button asChild variant="ghost" size="sm" className="rounded-lg text-xs">
+          <Button asChild variant="ghost" size="sm" className="rounded-md text-xs">
             <Link to="/contacts">View all</Link>
           </Button>
         </div>

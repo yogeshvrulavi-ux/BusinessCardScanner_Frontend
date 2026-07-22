@@ -22,7 +22,6 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContactsRouteImport } from './routes/contacts'
 import { Route as CompaniesRouteImport } from './routes/companies'
 import { Route as AuditRouteImport } from './routes/audit'
-import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
 
@@ -91,11 +90,6 @@ const AuditRoute = AuditRouteImport.update({
   path: '/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AnalyticsRoute = AnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -109,7 +103,6 @@ const AuthPathnameRoute = AuthPathnameRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
   '/audit': typeof AuditRoute
   '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
@@ -127,7 +120,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
   '/audit': typeof AuditRoute
   '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
@@ -146,7 +138,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
   '/audit': typeof AuditRoute
   '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
@@ -166,7 +157,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/analytics'
     | '/audit'
     | '/companies'
     | '/contacts'
@@ -184,7 +174,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/analytics'
     | '/audit'
     | '/companies'
     | '/contacts'
@@ -202,7 +191,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/analytics'
     | '/audit'
     | '/companies'
     | '/contacts'
@@ -221,7 +209,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AnalyticsRoute: typeof AnalyticsRoute
   AuditRoute: typeof AuditRoute
   CompaniesRoute: typeof CompaniesRoute
   ContactsRoute: typeof ContactsRoute
@@ -331,13 +318,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuditRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/analytics': {
-      id: '/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AnalyticsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -357,7 +337,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AnalyticsRoute: AnalyticsRoute,
   AuditRoute: AuditRoute,
   CompaniesRoute: CompaniesRoute,
   ContactsRoute: ContactsRoute,

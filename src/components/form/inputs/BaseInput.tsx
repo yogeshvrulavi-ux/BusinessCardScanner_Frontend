@@ -55,7 +55,7 @@ export const BaseInput = ({ as = "input", value, placeholder, type = "text", onC
           placeholder={placeholder}
           rows={1}
           onChange={(e) => onChange(e.target.value)}
-          className="min-h-[44px] resize-none overflow-hidden rounded-sm border-border/60 bg-background py-2.5 pr-9 leading-relaxed"
+          className="min-h-[44px] resize-none overflow-hidden rounded-md border-border/60 bg-background py-2.5 pr-9 leading-relaxed"
         />
         <FieldClearButton
           onClear={() => onChange("")}
@@ -73,7 +73,7 @@ export const BaseInput = ({ as = "input", value, placeholder, type = "text", onC
         placeholder={placeholder}
         type={type}
         onChange={(e) => onChange(e.target.value)}
-        className="h-11 rounded-sm border-border/60 bg-background pr-9"
+        className="h-11 rounded-md border-border/60 bg-background pr-9"
       />
       <FieldClearButton
         onClear={() => onChange("")}

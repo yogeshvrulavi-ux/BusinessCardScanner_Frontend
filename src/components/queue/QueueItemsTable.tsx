@@ -1,4 +1,4 @@
-import { Loader2, RefreshCw, Save, Trash2 } from "lucide-react";
+﻿import { Loader2, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/layout/StatusPill";
@@ -75,21 +75,21 @@ export function QueueItemsTable({
     <>
       <div className="hidden overflow-x-auto rounded-xl border border-border/60 lg:block">
         <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+          <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
             <tr>
-              <th className="px-4 py-3 font-medium">Contact</th>
+              <th className="px-4 py-3 font-bold text-white">Contact</th>
               {showOwner ? (
                 <>
-                  <th className="px-4 py-3 font-medium">Captured by</th>
-                  <th className="px-4 py-3 font-medium">Organisation</th>
+                  <th className="px-4 py-3 font-bold text-white">Captured by</th>
+                  <th className="px-4 py-3 font-bold text-white">Organisation</th>
                 </>
               ) : null}
-              <th className="px-4 py-3 font-medium">Email</th>
-              <th className="px-4 py-3 font-medium">Phone</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Retries</th>
-              <th className="px-4 py-3 font-medium">Queued</th>
-              <th className="px-4 py-3 font-medium text-right">Actions</th>
+              <th className="px-4 py-3 font-bold text-white">Email</th>
+              <th className="px-4 py-3 font-bold text-white">Phone</th>
+              <th className="px-4 py-3 font-bold text-white">Status</th>
+              <th className="px-4 py-3 font-bold text-white">Retries</th>
+              <th className="px-4 py-3 font-bold text-white">Queued</th>
+              <th className="px-4 py-3 font-bold text-white text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
@@ -147,7 +147,7 @@ export function QueueItemsTable({
                         size="sm"
                         onClick={() => onSave(item)}
                         disabled={rowLocked || syncingQueueId === item.id || isBusy}
-                        className="h-8 rounded-lg text-xs"
+                        className="h-8 rounded-md text-xs"
                       >
                         {syncingQueueId === item.id ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -168,7 +168,7 @@ export function QueueItemsTable({
                         size="icon"
                         onClick={() => onRemove(item)}
                         disabled={rowLocked}
-                        className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        className="h-8 w-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -225,7 +225,7 @@ export function QueueItemsTable({
                   variant={isFailed ? "outline" : "default"}
                   onClick={() => onSave(item)}
                   disabled={rowLocked || syncingQueueId === item.id || isBusy}
-                  className="flex-1 rounded-lg text-xs"
+                  className="flex-1 rounded-md text-xs"
                 >
                   {syncingQueueId === item.id ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -240,7 +240,7 @@ export function QueueItemsTable({
                   variant="ghost"
                   onClick={() => onRemove(item)}
                   disabled={rowLocked}
-                  className="rounded-lg text-xs text-muted-foreground hover:text-destructive"
+                  className="rounded-md text-xs text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyRound,
   Loader2,
@@ -27,6 +27,11 @@ import {
   updateUserStatus,
   type User,
 } from "@/lib/adminApi";
+import {
+  TABLE_PAGE_SIZE,
+  TablePagination,
+  clampPageAfterDelete,
+} from "@/components/ui/table-pagination";
 
 export function UsersPage() {
   return (
@@ -43,6 +48,7 @@ function UsersPageInner() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [search, setSearch] = useState("");
@@ -51,20 +57,29 @@ function UsersPageInner() {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [resetUser, setResetUser] = useState<User | null>(null);
 
-  const load = useCallback(async (silent = false) => {
+  const load = useCallback(async (silent = false, pageOverride?: number) => {
+    const targetPage = pageOverride ?? page;
     if (!silent) setIsLoading(true);
     else setIsRefreshing(true);
     try {
-      const res = await fetchUsers(1, 200);
-      setUsers(res.items);
-      setTotal(res.total);
+      const res = await fetchUsers(targetPage, TABLE_PAGE_SIZE);
+      const nextPage = clampPageAfterDelete(targetPage, res.total, TABLE_PAGE_SIZE);
+      if (nextPage !== targetPage) {
+        setPage(nextPage);
+        const again = await fetchUsers(nextPage, TABLE_PAGE_SIZE);
+        setUsers(again.items);
+        setTotal(again.total);
+      } else {
+        setUsers(res.items);
+        setTotal(res.total);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load users.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     void load();
@@ -78,9 +93,19 @@ function UsersPageInner() {
         `${u.first_name} ${u.last_name}`.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
         u.username.toLowerCase().includes(q) ||
-        u.role.toLowerCase().includes(q),
+        u.role.toLowerCase().includes(q) ||
+        (u.company_name || "").toLowerCase().includes(q) ||
+        (u.admin_name || "").toLowerCase().includes(q) ||
+        (u.admin_email || "").toLowerCase().includes(q),
     );
   }, [users, search]);
+
+  const adminSummary = useMemo(() => {
+    if (!isSuperAdmin) return null;
+    const admins = users.filter((u) => u.role === "ADMIN");
+    const userTotal = users.filter((u) => u.role === "USER").length;
+    return { adminCount: admins.length, userTotal };
+  }, [users, isSuperAdmin]);
 
   const handleDelete = async (user: User) => {
     const ok = await confirm({
@@ -141,9 +166,9 @@ function UsersPageInner() {
       case "SUPER_ADMIN":
         return "bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800";
       case "ADMIN":
-        return "bg-blue-100 text-blue-700 border-blue-200";
+        return "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800";
       default:
-        return "bg-gray-100 text-gray-600 border-gray-200";
+        return "bg-gray-100 text-gray-600 border-gray-200 dark:bg-muted dark:text-muted-foreground dark:border-border";
     }
   };
 
@@ -167,7 +192,13 @@ function UsersPageInner() {
 
       <PageShell
         title="Users"
-        description={total > 0 ? `${total} user${total === 1 ? "" : "s"} total` : "Manage users and permissions"}
+        description={
+          adminSummary
+            ? `${adminSummary.adminCount} admin${adminSummary.adminCount === 1 ? "" : "s"} · ${adminSummary.userTotal} user${adminSummary.userTotal === 1 ? "" : "s"}`
+            : total > 0
+              ? `${total} user${total === 1 ? "" : "s"} total`
+              : "Manage users and permissions"
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -190,7 +221,11 @@ function UsersPageInner() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, email, username, or role"
+              placeholder={
+                isSuperAdmin
+                  ? "Search by name, email, company, or admin"
+                  : "Search by name, email, username, or role"
+              }
               className="h-10 rounded-md border-border/60 bg-background pl-9"
             />
           </div>
@@ -215,14 +250,20 @@ function UsersPageInner() {
               {/* Desktop table */}
               <div className="hidden overflow-x-auto rounded-xl border border-border/60 lg:block">
                 <table className="w-full text-sm">
-                  <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
                     <tr>
-                      <th className="px-4 py-3 font-medium">User</th>
-                      <th className="px-4 py-3 font-medium">Username</th>
-                      <th className="px-4 py-3 font-medium">Role</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium">Last Login</th>
-                      <th className="px-4 py-3 font-medium text-right">Actions</th>
+                      <th className="px-4 py-3 font-bold text-white">User</th>
+                      <th className="px-4 py-3 font-bold text-white">Username</th>
+                      <th className="px-4 py-3 font-bold text-white">Role</th>
+                      {isSuperAdmin ? (
+                        <>
+                          <th className="px-4 py-3 font-bold text-white">Company</th>
+                          <th className="px-4 py-3 font-bold text-white">Admin / Users</th>
+                        </>
+                      ) : null}
+                      <th className="px-4 py-3 font-bold text-white">Status</th>
+                      <th className="px-4 py-3 font-bold text-white">Last Login</th>
+                      <th className="px-4 py-3 font-bold text-white text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
@@ -247,9 +288,33 @@ function UsersPageInner() {
                             {roleLabel(u.role)}
                           </Badge>
                         </td>
+                        {isSuperAdmin ? (
+                          <>
+                            <td className="px-4 py-3 text-xs text-muted-foreground">
+                              {u.company_name || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-xs">
+                              {u.role === "ADMIN" ? (
+                                <div>
+                                  <div className="font-medium text-foreground">
+                                    {u.user_count ?? 0} user{(u.user_count ?? 0) === 1 ? "" : "s"}
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">{u.email}</div>
+                                </div>
+                              ) : u.admin_name || u.admin_email ? (
+                                <div>
+                                  <div className="font-medium text-foreground">{u.admin_name || "Admin"}</div>
+                                  <div className="text-[11px] text-muted-foreground">{u.admin_email || "—"}</div>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                          </>
+                        ) : null}
                         <td className="px-4 py-3">
                           {u.is_active ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
                               <UserCheck className="h-3.5 w-3.5" /> Active
                             </span>
                           ) : (
@@ -267,7 +332,7 @@ function UsersPageInner() {
                               variant="ghost"
                               size="icon"
                               onClick={() => setEditUser(u)}
-                              className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg cursor-pointer"
+                              className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md cursor-pointer"
                               title="Edit"
                             >
                               <Pencil className="h-4 w-4" />
@@ -276,7 +341,7 @@ function UsersPageInner() {
                               variant="ghost"
                               size="icon"
                               onClick={() => setResetUser(u)}
-                              className="h-8 w-8 text-muted-foreground hover:text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer"
+                              className="h-8 w-8 text-muted-foreground hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-md cursor-pointer"
                               title="Reset password"
                             >
                               <KeyRound className="h-4 w-4" />
@@ -285,10 +350,10 @@ function UsersPageInner() {
                               variant="ghost"
                               size="icon"
                               onClick={() => void handleToggleActive(u)}
-                              className={`h-8 w-8 rounded-lg cursor-pointer ${
+                              className={`h-8 w-8 rounded-md cursor-pointer ${
                                 u.is_active
-                                  ? "text-muted-foreground hover:text-amber-600 hover:bg-amber-50"
-                                  : "text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
+                                  ? "text-muted-foreground hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                                  : "text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
                               }`}
                               title={u.is_active ? "Deactivate" : "Activate"}
                             >
@@ -298,7 +363,7 @@ function UsersPageInner() {
                               variant="ghost"
                               size="icon"
                               onClick={() => void handleDelete(u)}
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg cursor-pointer"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md cursor-pointer"
                               title="Delete"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -330,9 +395,19 @@ function UsersPageInner() {
                           </Badge>
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">{u.email}</div>
+                        {isSuperAdmin ? (
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            {u.company_name || "No company"}
+                            {u.role === "ADMIN"
+                              ? ` · ${u.user_count ?? 0} user${(u.user_count ?? 0) === 1 ? "" : "s"}`
+                              : u.admin_name
+                                ? ` · Admin: ${u.admin_name}`
+                                : ""}
+                          </div>
+                        ) : null}
                         <div className="mt-1 flex items-center gap-2">
                           {u.is_active ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
                               <UserCheck className="h-3 w-3" /> Active
                             </span>
                           ) : (
@@ -352,7 +427,7 @@ function UsersPageInner() {
                         variant="outline"
                         size="sm"
                         onClick={() => setEditUser(u)}
-                        className="h-8 rounded-lg text-xs"
+                        className="h-8 rounded-md text-xs"
                       >
                         <Pencil className="mr-1.5 h-3.5 w-3.5" />
                         Edit
@@ -361,7 +436,7 @@ function UsersPageInner() {
                         variant="outline"
                         size="sm"
                         onClick={() => setResetUser(u)}
-                        className="h-8 rounded-lg text-xs"
+                        className="h-8 rounded-md text-xs"
                       >
                         <KeyRound className="mr-1.5 h-3.5 w-3.5" />
                         Password
@@ -370,7 +445,7 @@ function UsersPageInner() {
                         variant="outline"
                         size="sm"
                         onClick={() => void handleToggleActive(u)}
-                        className="h-8 rounded-lg text-xs"
+                        className="h-8 rounded-md text-xs"
                       >
                         {u.is_active ? <UserX className="mr-1.5 h-3.5 w-3.5" /> : <UserCheck className="mr-1.5 h-3.5 w-3.5" />}
                         {u.is_active ? "Deactivate" : "Activate"}
@@ -379,7 +454,7 @@ function UsersPageInner() {
                         variant="ghost"
                         size="sm"
                         onClick={() => void handleDelete(u)}
-                        className="h-8 rounded-lg text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        className="h-8 rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       >
                         <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                         Delete
@@ -396,9 +471,16 @@ function UsersPageInner() {
                 </div>
               )}
 
-              <div className="mt-4 text-xs text-muted-foreground">
-                Showing {filtered.length} of {total}
-              </div>
+              <TablePagination
+                page={page}
+                total={total}
+                limit={TABLE_PAGE_SIZE}
+                disabled={isLoading || isRefreshing}
+                onPageChange={(next) => {
+                  setSearch("");
+                  setPage(next);
+                }}
+              />
             </>
           )}
         </Card>

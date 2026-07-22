@@ -45,6 +45,10 @@ import {
   listPlatformOfflineQueue,
   publishOfflineQueueSnapshot,
 } from "@/lib/offlineQueueRegistry";
+import {
+  TABLE_PAGE_SIZE,
+  TablePagination,
+} from "@/components/ui/table-pagination";
 
 function queueItemName(item: QueueItem): string {
   const d = item.contact_data;
@@ -74,10 +78,12 @@ export function QueuePage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   const isAdmin = user?.role === "ADMIN";
-  /** Show Captured by / Organisation ? Super Admin (all) and Admin (company). */
+  /** Show Captured by / Organisation for Super Admin (all) and Admin (company). */
   const showOwner = isSuperAdmin || isAdmin;
   const [contacts, setContacts] = useState<StoredContact[]>([]);
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
+  const [queueTotal, setQueueTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [syncingQueueId, setSyncingQueueId] = useState<string | null>(null);
@@ -102,13 +108,21 @@ export function QueuePage() {
       }
 
       if (isSuperAdmin) {
-        // Platform-wide registry (read-only in the table).
-        setQueueItems(await listPlatformOfflineQueue());
+        const platform = await listPlatformOfflineQueue({
+          page,
+          limit: TABLE_PAGE_SIZE,
+        });
+        setQueueItems(platform.items);
+        setQueueTotal(platform.total);
       } else if (isAdmin) {
-        // Company registry + this device's actionable local items.
         let companyQueue: QueueItem[] = [];
         try {
-          companyQueue = await listPlatformOfflineQueue();
+          // Load a wide page for merge; table is sliced client-side.
+          const platform = await listPlatformOfflineQueue({
+            page: 1,
+            limit: 200,
+          });
+          companyQueue = platform.items;
         } catch {
           /* Fall back to local-only if registry is unreachable. */
         }
@@ -117,9 +131,12 @@ export function QueuePage() {
           const queueId = item.id.replace(/^platform:[^:]+:/, "");
           return !localIds.has(queueId);
         });
-        setQueueItems([...stampLocalOwner(localQueue, user), ...remoteOthers]);
+        const merged = [...stampLocalOwner(localQueue, user), ...remoteOthers];
+        setQueueItems(merged);
+        setQueueTotal(merged.filter((i) => i.status !== "synced").length);
       } else {
         setQueueItems(localQueue);
+        setQueueTotal(localQueue.filter((i) => i.status !== "synced").length);
       }
     } catch (e) {
       console.error("Failed to load queue data:", e);
@@ -127,7 +144,7 @@ export function QueuePage() {
     } finally {
       if (!silent) setIsLoading(false);
     }
-  }, [isSuperAdmin, isAdmin, user]);
+  }, [isSuperAdmin, isAdmin, user, page]);
 
   useEffect(() => {
     void loadData();
@@ -192,7 +209,7 @@ export function QueuePage() {
       (i) => i.status === "pending" || i.status === "retrying",
     );
     if (unsynced.length === 0) {
-      toast.info("Queue is empty ? nothing waiting to save.");
+      toast.info("Queue is empty - nothing waiting to save.");
       return;
     }
 
@@ -344,16 +361,23 @@ export function QueuePage() {
     [queueItems],
   );
 
-  const queueTableItems = useMemo(
-    () =>
-      [...queueItems]
-        .filter((i) => i.status !== "synced")
-        .sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        ),
-    [queueItems],
-  );
+  const queueTableItems = useMemo(() => {
+    const sorted = [...queueItems]
+      .filter((i) => i.status !== "synced")
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
+    // SuperAdmin rows are already a DB page; others slice client-side.
+    if (isSuperAdmin) return sorted;
+    const start = (page - 1) * TABLE_PAGE_SIZE;
+    return sorted.slice(start, start + TABLE_PAGE_SIZE);
+  }, [queueItems, page, isSuperAdmin]);
+
+  const tableTotal = useMemo(() => {
+    if (isSuperAdmin) return queueTotal;
+    return queueItems.filter((i) => i.status !== "synced").length;
+  }, [isSuperAdmin, queueTotal, queueItems]);
 
   const isBusy = isSavingAll;
 
@@ -425,7 +449,7 @@ export function QueuePage() {
             <Card className="overflow-hidden rounded-2xl border-border/60 p-4 shadow-soft sm:p-6">
               <div className="mb-3 flex flex-col gap-1 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <div className="text-sm font-medium">Offline ? online (this device)</div>
+                  <div className="text-sm font-medium">Offline to online (this device)</div>
                   <div className="text-xs text-muted-foreground">
                     Captures held offline move into your saved contacts when you save them here.
                   </div>
@@ -498,6 +522,13 @@ export function QueuePage() {
                 showOwner={showOwner}
                 onSave={(item) => void handleSaveQueueItem(item)}
                 onRemove={(item) => void handleRemoveQueueItem(item)}
+              />
+              <TablePagination
+                page={page}
+                total={tableTotal}
+                limit={TABLE_PAGE_SIZE}
+                disabled={isLoading}
+                onPageChange={setPage}
               />
             </Card>
           </div>

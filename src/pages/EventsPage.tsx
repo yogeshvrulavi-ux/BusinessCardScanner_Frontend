@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Folder,
@@ -93,14 +93,14 @@ function EventContactsTable({ contacts }: { contacts: DirectoryContact[] }) {
     <>
       <div className="hidden overflow-x-auto rounded-xl border border-border/60 lg:block">
         <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+          <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
             <tr>
-              <th className="px-4 py-3 font-medium">Contact</th>
-              <th className="px-4 py-3 font-medium">Company</th>
-              <th className="px-4 py-3 font-medium">Email</th>
-              <th className="px-4 py-3 font-medium">Phone</th>
-              <th className="px-4 py-3 font-medium">Notes</th>
-              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-bold text-white">Contact</th>
+              <th className="px-4 py-3 font-bold text-white">Company</th>
+              <th className="px-4 py-3 font-bold text-white">Email</th>
+              <th className="px-4 py-3 font-bold text-white">Phone</th>
+              <th className="px-4 py-3 font-bold text-white">Notes</th>
+              <th className="px-4 py-3 font-bold text-white">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
@@ -252,7 +252,7 @@ export function EventsPage() {
             void refresh({ force: true });
           }}
           disabled={isRefreshing}
-          className="h-10 rounded-xl"
+          className="h-10 rounded-md"
         >
           <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
           Refresh
@@ -305,15 +305,15 @@ export function EventsPage() {
                   if (e.key === "Enter") handleCreateEvent();
                 }}
                 placeholder={`New event (e.g. ${getExampleEventName()})`}
-                className="h-10 rounded-lg sm:w-56"
+                className="h-10 rounded-md sm:w-56"
               />
-              <Button type="button" size="sm" onClick={handleCreateEvent} className="shrink-0 rounded-lg">
+              <Button type="button" size="sm" onClick={handleCreateEvent} className="shrink-0 rounded-md">
                 <Plus className="mr-1.5 h-4 w-4" />
                 Create
               </Button>
             </div>
             {selectedEventName ? (
-              <Button variant="ghost" size="sm" onClick={clearSelection} className="rounded-lg">
+              <Button variant="ghost" size="sm" onClick={clearSelection} className="rounded-md">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 All folders
               </Button>

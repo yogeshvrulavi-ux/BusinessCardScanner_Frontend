@@ -23,7 +23,7 @@ export const AuthField = forwardRef<HTMLInputElement, AuthFieldProps>(
             ref={ref}
             id={inputId}
             className={cn(
-              "h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-foreground outline-none transition-all",
+              "h-11 w-full rounded-md border border-slate-200 bg-white px-4 text-sm text-foreground outline-none transition-all",
               "placeholder:text-muted-foreground/60",
               "focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/15",
               error && "border-destructive/70 focus:border-destructive focus:ring-destructive/15",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Search, Filter, RefreshCw, Plus, Trash2, Send, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -21,20 +21,91 @@ import {
   syncAllQueueItems,
   syncQueueItem,
 } from "@/lib/contactStorage";
-import { useContactsDirectory } from "@/hooks/useContactsDirectory";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useAuth } from "@/lib/AuthContext";
 import { deleteDirectoryContact } from "@/lib/deleteDirectoryContact";
-import { contactRowKey, type DirectoryContact } from "@/lib/contactsDirectory";
+import {
+  contactRowKey,
+  invalidateContactsDirectory,
+  type DirectoryContact,
+} from "@/lib/contactsDirectory";
+import { fetchContactsPage } from "@/lib/contactsPageApi";
 import { getQueueItems } from "@/lib/indexeddb";
-import { loadEvents } from "@/lib/eventStorage";
+import { loadEvents, resolveEventNameForContact } from "@/lib/eventStorage";
+import { contactBelongsToAppUser, getCurrentAppUser, getCurrentAppUserSync } from "@/lib/currentAppUser";
+import { getOutreachStatusForContactSync } from "@/lib/outreachStatusStorage";
 import type { ContactStatus } from "@/lib/contactStatus";
 import { Route as ContactsRoute } from "@/routes/contacts";
 import { cn } from "@/lib/utils";
 import { ContactChannelIcons } from "@/components/contacts/ContactChannelIcons";
 import { CardImageCell } from "@/components/contacts/CardImageCell";
+import {
+  TABLE_PAGE_SIZE,
+  TablePagination,
+  clampPageAfterDelete,
+} from "@/components/ui/table-pagination";
 
 export type Contact = DirectoryContact;
+
+async function loadQueueAsDirectoryContacts(): Promise<DirectoryContact[]> {
+  const appUser = await getCurrentAppUser();
+  const queueItems = await getQueueItems();
+  return queueItems
+    .filter((item) => contactBelongsToAppUser(item, appUser))
+    .map((item) => {
+      const c = item.contact_data;
+      const name = String(c.fullName || c.name || "Unnamed Contact");
+      const initials = name
+        ? name
+            .split(" ")
+            .map((n: string) => n[0])
+            .slice(0, 2)
+            .join("")
+            .toUpperCase()
+        : "?";
+      const outreach = getOutreachStatusForContactSync(
+        {
+          email: String(c.email || ""),
+          phone: String(c.phone || ""),
+          name,
+        },
+        getCurrentAppUserSync(),
+      );
+      return {
+        id: item.id,
+        source: "queue" as const,
+        name,
+        initials,
+        company: c.company || "No Company",
+        title: c.title || c.designation || "No Title",
+        email: c.email || "",
+        phone: c.phone || "",
+        eventName: resolveEventNameForContact({
+          eventName: String(c.eventName || ""),
+          email: String(c.email || ""),
+          phone: String(c.phone || ""),
+        }),
+        notes: String(c.notes || ""),
+        status: (item.status === "retrying" ? "pending" : item.status) as ContactStatus,
+        channels: c.channels || {
+          whatsapp: !!c.phone,
+          email: !!c.email,
+        },
+        lastSync: item.status === "failed" ? "Sync failed" : "Queued · pending sync",
+        accent: "from-amber-500 to-orange-500",
+        createdAt: item.created_at || "",
+        hasCardImage: Boolean(
+          item.image_base64 && String(item.image_base64).startsWith("data:image/"),
+        ),
+        queueImageDataUrl:
+          item.image_base64 && String(item.image_base64).startsWith("data:image/")
+            ? String(item.image_base64)
+            : undefined,
+        emailDelivery: outreach.emailDelivery,
+        whatsappDelivery: outreach.whatsappDelivery,
+      };
+    });
+}
 
 const InitialsAvatar = ({
   initials,
@@ -71,10 +142,32 @@ export function ContactsPage() {
   const isSuperAdmin = authUser?.role === "SUPER_ADMIN";
   const isAdmin = authUser?.role === "ADMIN";
   const canDelete = authUser?.role === "SUPER_ADMIN" || authUser?.role === "ADMIN";
+
+  const [page, setPage] = useState(1);
+  const [dbContacts, setDbContacts] = useState<DirectoryContact[]>([]);
+  const [total, setTotal] = useState(0);
+  const [queueContacts, setQueueContacts] = useState<DirectoryContact[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"all" | ContactStatus>("all");
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+
+  /** Debounce search so each keystroke does not hit Postgres. */
+  const [debouncedQ, setDebouncedQ] = useState(q);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQ(q), 300);
+    return () => window.clearTimeout(timer);
+  }, [q]);
+
   const setQ = (next: string) => {
+    setPage(1);
     void navigate({ search: (prev) => ({ ...prev, q: next.trim() || undefined }), replace: true });
   };
   const setEventFilter = (next: string) => {
+    setPage(1);
     void navigate({
       search: (prev) => ({ ...prev, event: next === "all" ? undefined : next }),
       replace: true,
@@ -82,13 +175,13 @@ export function ContactsPage() {
   };
   const clearFilters = () => {
     setTab("all");
+    setPage(1);
     void navigate({
       search: (prev) => ({ ...prev, q: undefined, event: undefined }),
       replace: true,
     });
   };
-  const { contacts: contactsList, isLoading, isRefreshing, refresh, removeContact } =
-    useContactsDirectory();
+
   const { settings: userSettings } = useUserSettings();
   const showWhatsAppTemplateStatus = userSettings.whatsappNotificationsEnabled;
   const showEmailTemplateStatus = userSettings.emailNotificationsEnabled;
@@ -99,30 +192,80 @@ export function ContactsPage() {
   ]
     .filter(Boolean)
     .join(" / ");
-  const showInitialLoading = isLoading && contactsList.length === 0;
-  const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"all" | ContactStatus>("all");
-  const [syncingId, setSyncingId] = useState<string | null>(null);
-  const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
+
+  const contactsList = useMemo(() => {
+    if (page === 1) return [...queueContacts, ...dbContacts];
+    return dbContacts;
+  }, [page, queueContacts, dbContacts]);
+
+  const showInitialLoading = isLoading && contactsList.length === 0 && total === 0;
 
   const activeFilterCount =
     (q ? 1 : 0) + (eventFilter ? 1 : 0) + (tab !== "all" ? 1 : 0);
 
+  const loadPage = useCallback(
+    async ({ silent = false, pageOverride }: { silent?: boolean; pageOverride?: number } = {}) => {
+      const targetPage = pageOverride ?? page;
+      if (silent) setIsRefreshing(true);
+      else setIsLoading(true);
+      try {
+        setError(null);
+        const filters = { q: debouncedQ, event: eventFilter || undefined };
+        const [pageRes, queue] = await Promise.all([
+          fetchContactsPage(targetPage, TABLE_PAGE_SIZE, filters),
+          loadQueueAsDirectoryContacts(),
+        ]);
+        const nextPage = clampPageAfterDelete(targetPage, pageRes.total, TABLE_PAGE_SIZE);
+        if (nextPage !== targetPage) {
+          setPage(nextPage);
+          const again = await fetchContactsPage(nextPage, TABLE_PAGE_SIZE, filters);
+          setDbContacts(again.items);
+          setTotal(again.total);
+        } else {
+          setDbContacts(pageRes.items);
+          setTotal(pageRes.total);
+        }
+        setQueueContacts(queue);
+      } catch (err: unknown) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : "Failed to load contacts.");
+        if (!silent) toast.error("Failed to load contacts.");
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [page, debouncedQ, eventFilter],
+  );
+
+  useEffect(() => {
+    void loadPage();
+    const onDataChanged = () => {
+      void loadPage({ silent: true });
+    };
+    window.addEventListener("cs-contacts-updated", onDataChanged);
+    window.addEventListener("cs-queue-updated", onDataChanged);
+    return () => {
+      window.removeEventListener("cs-contacts-updated", onDataChanged);
+      window.removeEventListener("cs-queue-updated", onDataChanged);
+    };
+  }, [loadPage]);
+
   const reloadContacts = async ({
     silent = false,
-    force = true,
+    force: _force = true,
   }: { silent?: boolean; force?: boolean } = {}) => {
-    try {
-      setError(null);
-      const result = await refresh({ silent, force });
-      if (result?.fetchFailed && !silent) {
-        toast.info("Some contacts could not be loaded. Showing available data.");
-      }
-    } catch (err: unknown) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : "Failed to load contacts.");
+    await loadPage({ silent });
+  };
+
+  const removeContact = (contact: Pick<DirectoryContact, "id" | "source">) => {
+    if (contact.source === "queue") {
+      setQueueContacts((prev) => prev.filter((c) => contactRowKey(c) !== contactRowKey(contact)));
+    } else {
+      setDbContacts((prev) => prev.filter((c) => contactRowKey(c) !== contactRowKey(contact)));
+      setTotal((t) => Math.max(0, t - 1));
     }
+    invalidateContactsDirectory();
   };
 
   const handleSyncQueueItem = async (queueId: string) => {
@@ -149,8 +292,7 @@ export function ContactsPage() {
   };
 
   const handleSyncAllQueue = async () => {
-    const queuePending = contactsList.filter((c) => c.source === "queue");
-    if (queuePending.length === 0) {
+    if (queueContacts.length === 0) {
       toast.info("No queued contacts waiting to sync.");
       return;
     }
@@ -196,9 +338,21 @@ export function ContactsPage() {
   const filtered = useMemo(() => {
     return contactsList.filter((c) => {
       if (tab !== "all" && c.status !== tab) return false;
-      if (eventFilter && (c.eventName || "").trim().toLowerCase() !== eventFilter.trim().toLowerCase()) return false;
-      const searchStr = `${c.name || ""} ${c.company || ""} ${c.email || ""} ${c.eventName || ""}`.toLowerCase();
-      if (q && !searchStr.includes(q.toLowerCase())) return false;
+      // DB rows are already filtered by q/event on the server.
+      // Queue rows (local only) still need client-side match.
+      if (c.source === "queue") {
+        if (
+          eventFilter &&
+          (c.eventName || "").trim().toLowerCase() !== eventFilter.trim().toLowerCase()
+        ) {
+          return false;
+        }
+        if (q) {
+          const searchStr =
+            `${c.name || ""} ${c.company || ""} ${c.email || ""} ${c.eventName || ""}`.toLowerCase();
+          if (!searchStr.includes(q.toLowerCase())) return false;
+        }
+      }
       return true;
     });
   }, [contactsList, tab, q, eventFilter]);
@@ -232,14 +386,14 @@ export function ContactsPage() {
     return () => window.clearTimeout(retry);
   }, [highlight, showInitialLoading, q, tab, highlightInView, contactsList.length]);
 
-  const pendingQueueCount = useMemo(() => contactsList.filter((c) => c.source === "queue").length, [contactsList]);
+  const pendingQueueCount = queueContacts.length;
 
   const counts = useMemo(() => ({
-    all: contactsList.length,
-    synced: contactsList.filter((c) => c.status === "synced").length,
-    pending: contactsList.filter((c) => c.status === "pending").length,
-    failed: contactsList.filter((c) => c.status === "failed").length,
-  }), [contactsList]);
+    all: total + queueContacts.length,
+    synced: total,
+    pending: queueContacts.length,
+    failed: dbContacts.filter((c) => c.status === "failed").length,
+  }), [total, queueContacts.length, dbContacts]);
 
   const formatDate = (iso: string | undefined) => {
     if (!iso) return "\u2014";
@@ -252,13 +406,18 @@ export function ContactsPage() {
     <div className="page-bottom-safe lg:pb-0">
     <PageShell
       title={PAGE.contacts.title}
-      description={contactsList.length > 0
-        ? `${PAGE.contacts.description} \u00b7 ${contactsList.length} record${contactsList.length === 1 ? "" : "s"}`
+      description={total > 0 || queueContacts.length > 0
+        ? `${PAGE.contacts.description} \u00b7 ${total + queueContacts.length} record${total + queueContacts.length === 1 ? "" : "s"}`
         : PAGE.contacts.description
       }
       actions={
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
-          <Button variant="outline" onClick={() => void reloadContacts({ force: true })} disabled={isRefreshing} className="w-full rounded-md sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => void reloadContacts({ force: true })}
+            disabled={isRefreshing}
+            className="w-full sm:w-auto"
+          >
             <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${isRefreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -266,20 +425,25 @@ export function ContactsPage() {
             variant="outline"
             onClick={() => setShowFilters((prev) => !prev)}
             aria-expanded={showFilters}
-            className={cn("h-10 w-full rounded-xl sm:w-auto", showFilters && "border-primary/50 bg-primary/5 text-primary")}
+            className={cn(
+              "w-full sm:w-auto",
+              showFilters && "border-primary/50 bg-primary/5 text-primary",
+            )}
           >
-            <Filter className="mr-2 h-4 w-4 shrink-0" /> Filters
-            {activeFilterCount > 0 && (
-              <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
+            <Filter className="mr-2 h-4 w-4 shrink-0" />
+            Filters
+            {activeFilterCount > 0 ? (
+              <span className="ml-1.5 rounded-md bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
                 {activeFilterCount}
               </span>
-            )}
+            ) : null}
           </Button>
           <Button
             onClick={() => void navigate({ to: "/scan" })}
-            className="w-full rounded-md bg-gradient-primary shadow-glow sm:w-auto"
+            className="w-full sm:w-auto"
           >
-            <Plus className="mr-2 h-4 w-4 shrink-0" /> New contact
+            <Plus className="mr-2 h-4 w-4 shrink-0" />
+            New contact
           </Button>
         </div>
       }
@@ -358,26 +522,26 @@ export function ContactsPage() {
             {/* Desktop table */}
             <div className="mt-5 hidden overflow-x-auto rounded-xl border border-border/60 lg:block">
               <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Contact Name</th>
-                    <th className="px-4 py-3 font-medium">Card</th>
-                    <th className="px-4 py-3 font-medium">Company</th>
-                    <th className="px-4 py-3 font-medium">Designation</th>
-                    <th className="px-4 py-3 font-medium">Email</th>
-                    <th className="px-4 py-3 font-medium">Phone</th>
+                    <th className="px-4 py-3 font-bold text-white">Contact Name</th>
+                    <th className="px-4 py-3 font-bold text-white">Card</th>
+                    <th className="px-4 py-3 font-bold text-white">Company</th>
+                    <th className="px-4 py-3 font-bold text-white">Designation</th>
+                    <th className="px-4 py-3 font-bold text-white">Email</th>
+                    <th className="px-4 py-3 font-bold text-white">Phone</th>
                     {isSuperAdmin && (
                       <>
-                        <th className="px-4 py-3 font-medium">Admin Name</th>
-                        <th className="px-4 py-3 font-medium">Captured By</th>
+                        <th className="px-4 py-3 font-bold text-white">Admin Name</th>
+                        <th className="px-4 py-3 font-bold text-white">Captured By</th>
                       </>
                     )}
-                    {isAdmin && <th className="px-4 py-3 font-medium">Captured By</th>}
-                    <th className="px-4 py-3 font-medium">Event</th>
-                    {showTemplateStatusColumn && <th className="px-4 py-3 font-medium">{templateColumnLabel}</th>}
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Created</th>
-                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                    {isAdmin && <th className="px-4 py-3 font-bold text-white">Captured By</th>}
+                    <th className="px-4 py-3 font-bold text-white">Event</th>
+                    {showTemplateStatusColumn && <th className="px-4 py-3 font-bold text-white">{templateColumnLabel}</th>}
+                    <th className="px-4 py-3 font-bold text-white">Status</th>
+                    <th className="px-4 py-3 font-bold text-white">Created</th>
+                    <th className="px-4 py-3 font-bold text-white text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -428,12 +592,12 @@ export function ContactsPage() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {c.source === "queue" && (
-                            <Button variant="outline" size="sm" onClick={() => handleSyncQueueItem(c.id)} disabled={syncingId === c.id || isSyncingAll} className="h-8 rounded-lg text-xs">
+                            <Button variant="outline" size="sm" onClick={() => handleSyncQueueItem(c.id)} disabled={syncingId === c.id || isSyncingAll} className="h-8 rounded-md text-xs">
                               {syncingId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Send className="mr-1.5 h-3 w-3" />Sync</>}
                             </Button>
                           )}
                           {canDelete && (
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(c)} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg cursor-pointer">
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(c)} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md cursor-pointer">
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
@@ -490,12 +654,12 @@ export function ContactsPage() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {c.source === "queue" && (
-                      <Button variant="outline" size="sm" onClick={() => handleSyncQueueItem(c.id)} disabled={syncingId === c.id || isSyncingAll} className="flex-1 min-w-[120px] rounded-lg text-xs sm:flex-none">
+                      <Button variant="outline" size="sm" onClick={() => handleSyncQueueItem(c.id)} disabled={syncingId === c.id || isSyncingAll} className="flex-1 min-w-[120px] rounded-md text-xs sm:flex-none">
                         {syncingId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Sync to database"}
                       </Button>
                     )}
                     {canDelete && (
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(c)} className="rounded-lg text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(c)} className="rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
                         <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
                       </Button>
                     )}
@@ -514,9 +678,13 @@ export function ContactsPage() {
                 <p className="mt-1 max-w-xs text-sm text-muted-foreground">Try a different search or change the active filter.</p>
               </div>
             )}
-            <div className="mt-5 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <div>Showing {filtered.length} of {contactsList.length}</div>
-            </div>
+            <TablePagination
+              page={page}
+              total={total}
+              limit={TABLE_PAGE_SIZE}
+              disabled={isLoading || isRefreshing}
+              onPageChange={setPage}
+            />
           </>
         )}
       </Card>

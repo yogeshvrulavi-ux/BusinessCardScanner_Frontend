@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { Building2, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,11 @@ import {
   deleteCompany,
   type Company,
 } from "@/lib/adminApi";
+import {
+  TABLE_PAGE_SIZE,
+  TablePagination,
+  clampPageAfterDelete,
+} from "@/components/ui/table-pagination";
 
 export function CompaniesPage() {
   return (
@@ -26,24 +31,34 @@ function CompaniesPageInner() {
   const { confirm } = useConfirmModal();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const load = useCallback(async (silent = false) => {
+  const load = useCallback(async (silent = false, pageOverride?: number) => {
+    const targetPage = pageOverride ?? page;
     if (!silent) setIsLoading(true);
     else setIsRefreshing(true);
     try {
-      const res = await fetchCompanies(1, 100);
-      setCompanies(res.items);
-      setTotal(res.total);
+      const res = await fetchCompanies(targetPage, TABLE_PAGE_SIZE);
+      const nextPage = clampPageAfterDelete(targetPage, res.total, TABLE_PAGE_SIZE);
+      if (nextPage !== targetPage) {
+        setPage(nextPage);
+        const again = await fetchCompanies(nextPage, TABLE_PAGE_SIZE);
+        setCompanies(again.items);
+        setTotal(again.total);
+      } else {
+        setCompanies(res.items);
+        setTotal(res.total);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load companies.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     void load();
@@ -82,13 +97,13 @@ function CompaniesPageInner() {
   const statusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case "active":
-        return "bg-emerald-100 text-emerald-700 border-emerald-200";
+        return "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800";
       case "inactive":
-        return "bg-amber-100 text-amber-700 border-amber-200";
+        return "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800";
       case "suspended":
-        return "bg-red-100 text-red-700 border-red-200";
+        return "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800";
       default:
-        return "bg-gray-100 text-gray-600 border-gray-200";
+        return "bg-gray-100 text-gray-600 border-gray-200 dark:bg-muted dark:text-muted-foreground dark:border-border";
     }
   };
 
@@ -102,7 +117,11 @@ function CompaniesPageInner() {
 
       <PageShell
         title="Companies"
-        description={total > 0 ? `${total} compan${total === 1 ? "y" : "ies"} registered` : "Manage companies and admin accounts"}
+        description={
+          total > 0
+            ? `${total} compan${total === 1 ? "y" : "ies"} with admin and user details`
+            : "Manage companies and admin accounts"
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -152,14 +171,15 @@ function CompaniesPageInner() {
               {/* Desktop table */}
               <div className="hidden overflow-x-auto rounded-xl border border-border/60 lg:block">
                 <table className="w-full text-sm">
-                  <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
                     <tr>
-                      <th className="px-4 py-3 font-medium">Company</th>
-                      <th className="px-4 py-3 font-medium">Code</th>
-                      <th className="px-4 py-3 font-medium">Contact</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium">Created</th>
-                      <th className="px-4 py-3 font-medium text-right">Actions</th>
+                      <th className="px-4 py-3 font-bold text-white">Company</th>
+                      <th className="px-4 py-3 font-bold text-white">Admin</th>
+                      <th className="px-4 py-3 font-bold text-white">Users</th>
+                      <th className="px-4 py-3 font-bold text-white">Code</th>
+                      <th className="px-4 py-3 font-bold text-white">Status</th>
+                      <th className="px-4 py-3 font-bold text-white">Created</th>
+                      <th className="px-4 py-3 font-bold text-white text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
@@ -179,17 +199,22 @@ function CompaniesPageInner() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{c.company_code}</code>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {c.email || c.phone ? (
-                            <div className="space-y-0.5 text-[11px]">
-                              {c.email && <div>{c.email}</div>}
-                              {c.phone && <div>{c.phone}</div>}
+                          {c.admin_name || c.admin_email ? (
+                            <div>
+                              <div className="font-medium">{c.admin_name || "—"}</div>
+                              <div className="text-[11px] text-muted-foreground">{c.admin_email || "—"}</div>
                             </div>
                           ) : (
-                            <span className="text-muted-foreground/60">—</span>
+                            <span className="text-muted-foreground/60">No admin yet</span>
                           )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
+                            {c.user_count ?? 0}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{c.company_code}</code>
                         </td>
                         <td className="px-4 py-3">
                           <Badge className={`rounded-full border text-[10px] font-medium ${statusColor(c.status)}`}>
@@ -204,7 +229,7 @@ function CompaniesPageInner() {
                             variant="ghost"
                             size="icon"
                             onClick={() => void handleDelete(c)}
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg cursor-pointer"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md cursor-pointer"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -235,10 +260,12 @@ function CompaniesPageInner() {
                         </div>
                         <div className="mt-0.5 text-xs text-muted-foreground">
                           <code className="rounded bg-muted px-1 py-0.5 text-[10px] font-mono">{c.company_code}</code>
-                          {c.email ? ` · ${c.email}` : ""}
+                          {c.admin_email ? ` · ${c.admin_email}` : c.email ? ` · ${c.email}` : ""}
                         </div>
                         <div className="mt-1 text-[11px] text-muted-foreground">
-                          Created {formatDate(c.created_at)}
+                          {c.admin_name ? `Admin: ${c.admin_name} · ` : ""}
+                          {c.user_count ?? 0} user{(c.user_count ?? 0) === 1 ? "" : "s"}
+                          {" · "}Created {formatDate(c.created_at)}
                         </div>
                       </div>
                     </div>
@@ -247,7 +274,7 @@ function CompaniesPageInner() {
                         variant="ghost"
                         size="sm"
                         onClick={() => void handleDelete(c)}
-                        className="h-8 rounded-lg text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        className="h-8 rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       >
                         <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                         Delete
@@ -257,9 +284,13 @@ function CompaniesPageInner() {
                 ))}
               </div>
 
-              <div className="mt-4 text-xs text-muted-foreground">
-                Showing {companies.length} of {total}
-              </div>
+              <TablePagination
+                page={page}
+                total={total}
+                limit={TABLE_PAGE_SIZE}
+                disabled={isLoading || isRefreshing}
+                onPageChange={(next) => setPage(next)}
+              />
             </>
           )}
         </Card>

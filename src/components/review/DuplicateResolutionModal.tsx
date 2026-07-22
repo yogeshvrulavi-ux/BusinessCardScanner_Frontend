@@ -62,14 +62,14 @@ export function DuplicateResolutionModal({
         )}
 
         <div className="grid grid-cols-2 gap-2 pt-2">
-          <Button variantType="secondary" className="rounded-sm" onClick={() => onResolve("update")}>
+          <Button variantType="secondary" className="rounded-md" onClick={() => onResolve("update")}>
             Update existing
           </Button>
-          <Button variantType="secondary" className="rounded-sm" onClick={() => onResolve("merge")}>
+          <Button variantType="secondary" className="rounded-md" onClick={() => onResolve("merge")}>
             Merge contact
           </Button>
-          <Button className="rounded-sm" onClick={() => onResolve("new")}>Save as new</Button>
-          <Button variantType="secondary" className="rounded-sm" onClick={() => onResolve("discard")}>
+          <Button className="rounded-md" onClick={() => onResolve("new")}>Save as new</Button>
+          <Button variantType="secondary" className="rounded-md" onClick={() => onResolve("discard")}>
             Discard
           </Button>
         </div>

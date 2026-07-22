@@ -61,11 +61,23 @@ export async function publishOfflineQueueSnapshot(items?: QueueItem[]): Promise<
 }
 
 /** Platform records are read-only on this device and use collision-safe IDs. */
-export async function listPlatformOfflineQueue(): Promise<QueueItem[]> {
-  const response = await apiFetch(`${API_BASE_URL}/api/offline-queue`);
+export async function listPlatformOfflineQueue(options?: {
+  page?: number;
+  limit?: number;
+}): Promise<{ items: QueueItem[]; total: number; page: number; limit: number }> {
+  const page = options?.page ?? 1;
+  const limit = options?.limit ?? 10;
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/offline-queue?page=${page}&limit=${limit}`,
+  );
   if (!response.ok) throw new Error(`Platform queue failed (${response.status})`);
-  const data = (await response.json()) as { items?: PlatformQueueRecord[] };
-  return (data.items ?? []).map((record) => ({
+  const data = (await response.json()) as {
+    items?: PlatformQueueRecord[];
+    total?: number;
+    page?: number;
+    limit?: number;
+  };
+  const items = (data.items ?? []).map((record) => ({
     id: `platform:${record.created_by_user_id}:${record.queue_id}`,
     contact_data: {
       ...(record.contact_data ?? {}),
@@ -81,4 +93,10 @@ export async function listPlatformOfflineQueue(): Promise<QueueItem[]> {
     error_message: record.error_message ?? undefined,
     capturedByUserId: record.created_by_user_id,
   }));
+  return {
+    items,
+    total: typeof data.total === "number" ? data.total : items.length,
+    page: typeof data.page === "number" ? data.page : page,
+    limit: typeof data.limit === "number" ? data.limit : limit,
+  };
 }

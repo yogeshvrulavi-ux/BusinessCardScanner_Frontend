@@ -174,7 +174,7 @@ export function HeaderSearch({
             if (hasMinQuery) setOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          className="h-9 w-full rounded-md border-border/60 bg-white pl-9 pr-14 text-sm text-foreground shadow-none focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-border/80 dark:bg-white dark:focus-visible:bg-white sm:pr-16"
+          className="h-9 w-full rounded-md border-border/60 bg-background pl-9 pr-14 text-sm text-foreground shadow-none focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-border/80 sm:pr-16"
           aria-label="Search contact directory, companies, and sync queue"
           aria-keyshortcuts="Control+K Meta+K"
         />

@@ -14,7 +14,7 @@ export const ImagePreview = ({
     </div>
     <div className="flex items-center justify-between gap-3">
       <p className="text-sm text-muted-foreground">Scanned card</p>
-      <Button variantType="danger" className="h-8 rounded-sm px-3 text-xs" onClick={onClear}>
+      <Button variantType="danger" className="h-8 rounded-md px-3 text-xs" onClick={onClear}>
         Remove
       </Button>
     </div>

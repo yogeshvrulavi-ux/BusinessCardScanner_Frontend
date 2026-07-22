@@ -45,7 +45,7 @@ export function CookieConsentBanner() {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-lg p-1 text-muted-foreground hover:bg-muted"
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted"
                 aria-label="Close"
               >
                 <X className="h-4 w-4" />

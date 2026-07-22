@@ -34,7 +34,7 @@ export const FormActions = ({
           Clear Fields
         </Button>
       ) : null}
-      <Button variantType="secondary" className="min-w-[7rem] flex-1 rounded-sm sm:flex-none" onClick={onReset}>
+      <Button variantType="secondary" className="min-w-[7rem] flex-1 rounded-md sm:flex-none" onClick={onReset}>
         Discard
       </Button>
       <Button

@@ -734,10 +734,10 @@ export const ReviewPage = () => {
                 />
               )}
               <div className="mt-4 flex gap-2">
-                <Button variantType="secondary" className="h-11 flex-1 rounded-sm" onClick={() => setCameraOpen(true)}>
+                <Button variantType="secondary" className="h-11 flex-1 rounded-md" onClick={() => setCameraOpen(true)}>
                   Use camera
                 </Button>
-                <Button variantType="secondary" className="h-11 flex-1 rounded-sm" onClick={() => navigate({ to: "/scan" })}>
+                <Button variantType="secondary" className="h-11 flex-1 rounded-md" onClick={() => navigate({ to: "/scan" })}>
                   Retake scan
                 </Button>
               </div>
@@ -776,7 +776,7 @@ export const ReviewPage = () => {
                       placeholder="Type your notes here..."
                       maxLength={2000}
                       className={cn(
-                        "min-h-32 resize-none rounded-sm border-border/60 bg-background pb-12 pl-3.5 pr-14 pt-3.5 text-sm leading-relaxed shadow-sm transition-[border-color,box-shadow]",
+                        "min-h-32 resize-none rounded-md border-border/60 bg-background pb-12 pl-3.5 pr-14 pt-3.5 text-sm leading-relaxed shadow-sm transition-[border-color,box-shadow]",
                         speech.listening && "border-red-300/80 ring-2 ring-red-200/60 dark:border-red-900/60 dark:ring-red-950/40",
                       )}
                     />
@@ -785,7 +785,7 @@ export const ReviewPage = () => {
                       disabled={notes.length === 0}
                       className="right-2 top-2"
                     />
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 rounded-b-sm bg-gradient-to-t from-background via-background/95 to-transparent px-3.5 pb-2.5 pt-6">
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 rounded-b-md bg-gradient-to-t from-background via-background/95 to-transparent px-3.5 pb-2.5 pt-6">
                       <span className="text-[11px] tabular-nums text-muted-foreground">
                         {speech.listening ? (
                           <span className="inline-flex items-center gap-1.5 font-medium text-red-600 dark:text-red-400">
@@ -855,7 +855,7 @@ export const ReviewPage = () => {
                   type="button"
                   variantType={showAdvancedFields ? "secondary" : "secondary"}
                   onClick={() => setShowAdvancedFields((prev) => !prev)}
-                  className="h-8 rounded-sm px-3 text-xs font-medium"
+                  className="h-8 rounded-md px-3 text-xs font-medium"
                 >
                   {showAdvancedFields ? "Hide optional fields" : "Show optional fields"}
                 </Button>

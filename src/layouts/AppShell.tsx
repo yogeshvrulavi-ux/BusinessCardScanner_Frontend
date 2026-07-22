@@ -31,9 +31,12 @@ export function AppShell() {
     if (typeof window === "undefined") return;
     if (isPublicShellRoute) return;
 
-    const routesToPreload = ["/scan", "/contacts", "/queue", "/settings"];
+    // Avoid preloading /settings — TanStack Router can throw `_nonReactive`
+    // during early preload before auth/store context is ready (also triggers
+    // noisy 401 + service-worker fetch failures for /settings).
+    const routesToPreload = ["/scan", "/contacts", "/queue"];
     routesToPreload.forEach((path) => {
-      router.preloadRoute({ to: path }).catch(() => undefined);
+      void router.preloadRoute({ to: path }).catch(() => undefined);
     });
 
     if ("serviceWorker" in navigator) {

@@ -181,7 +181,11 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
     const response = await apiFetch(getContactsListUrl());
     if (response.ok) {
       const json = await response.json();
-      pgData = Array.isArray(json) ? json : [];
+      pgData = Array.isArray(json)
+        ? json
+        : Array.isArray(json?.items)
+          ? json.items
+          : [];
     } else {
       console.error("PostgreSQL contacts fetch failed:", response.statusText);
       fetchFailed = true;

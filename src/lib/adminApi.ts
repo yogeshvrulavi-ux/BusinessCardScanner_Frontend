@@ -15,6 +15,10 @@ export type Company = {
   company_name: string;
   company_code: string;
   admin_id: string | null;
+  admin_name?: string;
+  admin_email?: string;
+  admin_username?: string;
+  user_count?: number;
   address: string;
   phone: string;
   email: string;
@@ -35,6 +39,10 @@ export type User = {
   is_verified: boolean;
   company_id: string | null;
   admin_id: string | null;
+  company_name?: string;
+  admin_name?: string;
+  admin_email?: string;
+  user_count?: number;
   last_login: string | null;
   created_at: string;
   updated_at: string;
@@ -134,7 +142,7 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export async function fetchCompanies(
   page = 1,
-  limit = 50,
+  limit = 10,
 ): Promise<PaginatedResponse<Company>> {
   return apiJson(`/api/companies?page=${page}&limit=${limit}`);
 }
@@ -167,7 +175,7 @@ export async function deleteCompany(id: string) {
 
 export async function fetchUsers(
   page = 1,
-  limit = 50,
+  limit = 10,
 ): Promise<PaginatedResponse<User>> {
   return apiJson(`/api/users?page=${page}&limit=${limit}`);
 }
@@ -203,9 +211,14 @@ export async function adminResetPassword(id: string, new_password: string) {
 /*  Invitations                                                        */
 /* ------------------------------------------------------------------ */
 
-export async function fetchInvitations(status?: string) {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
-  return apiJson<{ items: Invitation[]; total: number }>(`/api/invitations${qs}`);
+export async function fetchInvitations(status?: string, page = 1, limit = 10) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  params.set("page", String(page));
+  params.set("limit", String(limit));
+  return apiJson<{ items: Invitation[]; total: number; page: number; limit: number }>(
+    `/api/invitations?${params.toString()}`,
+  );
 }
 
 export async function sendInvitation(data: InviteUserData) {

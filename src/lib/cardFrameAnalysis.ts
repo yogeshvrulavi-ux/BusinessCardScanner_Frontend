@@ -403,11 +403,11 @@ export async function requestCameraStream(
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log("✓ Camera stream acquired with constraints:", constraints);
+      console.log("Camera stream acquired with constraints:", constraints);
       return stream;
     } catch (err) {
       lastError = err;
-      console.warn("✗ Camera attempt failed:", constraints, err);
+      console.warn("Camera attempt failed:", constraints, err);
     }
   }
 

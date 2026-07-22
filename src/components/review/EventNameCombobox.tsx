@@ -37,7 +37,7 @@ export const EventNameCombobox = forwardRef<HTMLInputElement, EventNameComboboxP
           disabled={disabled}
           autoComplete="off"
           className={cn(
-            "h-11 rounded-sm border-border/60 bg-background pr-9",
+            "h-11 rounded-md border-border/60 bg-background pr-9",
             error && "border-destructive/60",
           )}
         />

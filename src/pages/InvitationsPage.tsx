@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Loader2,
   Mail,
@@ -24,6 +24,11 @@ import {
   revokeInvitation,
   type Invitation,
 } from "@/lib/adminApi";
+import {
+  TABLE_PAGE_SIZE,
+  TablePagination,
+  clampPageAfterDelete,
+} from "@/components/ui/table-pagination";
 
 export function InvitationsPage() {
   return (
@@ -39,24 +44,36 @@ function InvitationsPageInner() {
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   const [items, setItems] = useState<Invitation[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
 
-  const load = useCallback(async (silent = false) => {
+  const load = useCallback(async (silent = false, pageOverride?: number) => {
+    const targetPage = pageOverride ?? page;
     if (!silent) setIsLoading(true);
     else setIsRefreshing(true);
     try {
-      const res = await fetchInvitations();
-      setItems(res.items);
+      const res = await fetchInvitations(undefined, targetPage, TABLE_PAGE_SIZE);
+      const nextPage = clampPageAfterDelete(targetPage, res.total, TABLE_PAGE_SIZE);
+      if (nextPage !== targetPage) {
+        setPage(nextPage);
+        const again = await fetchInvitations(undefined, nextPage, TABLE_PAGE_SIZE);
+        setItems(again.items);
+        setTotal(again.total);
+      } else {
+        setItems(res.items);
+        setTotal(res.total);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load invitations.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     void load();
@@ -187,22 +204,23 @@ function InvitationsPageInner() {
               </Button>
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto rounded-xl border border-border/60">
               <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Email</th>
-                    <th className="px-4 py-3 font-medium">Role</th>
-                    <th className="px-4 py-3 font-medium">Company</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Expires</th>
-                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                    <th className="px-4 py-3 font-bold text-white">Email</th>
+                    <th className="px-4 py-3 font-bold text-white">Role</th>
+                    <th className="px-4 py-3 font-bold text-white">Company</th>
+                    <th className="px-4 py-3 font-bold text-white">Status</th>
+                    <th className="px-4 py-3 font-bold text-white">Expires</th>
+                    <th className="px-4 py-3 font-bold text-white text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {filtered.map((inv) => (
                     <tr key={inv.id} className="hover:bg-muted/30">
-                      <td className="px-4 py-3 font-medium">{inv.email}</td>
+                      <td className="px-4 py-3 font-bold text-white">{inv.email}</td>
                       <td className="px-4 py-3">{inv.role}</td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {inv.company_name || "—"}
@@ -244,6 +262,17 @@ function InvitationsPageInner() {
                 </tbody>
               </table>
             </div>
+            <TablePagination
+              page={page}
+              total={total}
+              limit={TABLE_PAGE_SIZE}
+              disabled={isLoading || isRefreshing}
+              onPageChange={(next) => {
+                setSearch("");
+                setPage(next);
+              }}
+            />
+            </>
           )}
         </Card>
       </PageShell>

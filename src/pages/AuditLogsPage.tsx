@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { Loader2, RefreshCw, ScrollText } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { AuthGate } from "@/components/auth/AuthGate";
 import { toast } from "sonner";
 import { API_BASE_URL } from "@/lib/api";
 import { apiFetch } from "@/lib/apiFetch";
+import { TABLE_PAGE_SIZE, TablePagination } from "@/components/ui/table-pagination";
 
 type AuditLog = {
   id: string;
@@ -42,6 +43,7 @@ export function AuditLogsPage() {
 function AuditLogsPageInner() {
   const [items, setItems] = useState<AuditLog[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -49,7 +51,9 @@ function AuditLogsPageInner() {
     if (!silent) setIsLoading(true);
     else setIsRefreshing(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/api/audit-logs?page=1&limit=100`);
+      const res = await apiFetch(
+        `${API_BASE_URL}/api/audit-logs?page=${page}&limit=${TABLE_PAGE_SIZE}`,
+      );
       if (!res.ok) throw new Error("Failed to load audit logs.");
       const data = await res.json();
       setItems(data.items ?? data.logs ?? []);
@@ -60,7 +64,7 @@ function AuditLogsPageInner() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     void load();
@@ -90,13 +94,13 @@ function AuditLogsPageInner() {
         ) : (
           <div className="overflow-x-auto rounded-xl border border-border/60">
             <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+              <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
                 <tr>
-                  <th className="px-4 py-3 font-medium">When</th>
-                  <th className="px-4 py-3 font-medium">Action</th>
-                  <th className="px-4 py-3 font-medium">Performed By</th>
-                  <th className="px-4 py-3 font-medium">Username</th>
-                  <th className="px-4 py-3 font-medium">Role</th>
+                  <th className="px-4 py-3 font-bold text-white">When</th>
+                  <th className="px-4 py-3 font-bold text-white">Action</th>
+                  <th className="px-4 py-3 font-bold text-white">Performed By</th>
+                  <th className="px-4 py-3 font-bold text-white">Username</th>
+                  <th className="px-4 py-3 font-bold text-white">Role</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -105,7 +109,7 @@ function AuditLogsPageInner() {
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {log.created_at ? new Date(log.created_at).toLocaleString() : "—"}
                     </td>
-                    <td className="px-4 py-3 font-medium">{log.action}</td>
+                    <td className="px-4 py-3 font-bold text-white">{log.action}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium">{log.actor_name?.trim() || log.actor_username || "System"}</div>
                       <div className="text-xs text-muted-foreground">
@@ -124,6 +128,15 @@ function AuditLogsPageInner() {
             </table>
           </div>
         )}
+        {!isLoading && total > 0 ? (
+          <TablePagination
+            page={page}
+            total={total}
+            limit={TABLE_PAGE_SIZE}
+            disabled={isLoading || isRefreshing}
+            onPageChange={setPage}
+          />
+        ) : null}
       </Card>
     </PageShell>
   );

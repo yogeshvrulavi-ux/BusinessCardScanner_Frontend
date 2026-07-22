@@ -5,7 +5,6 @@ import {
   ScanLine,
   FolderKanban,
   Inbox,
-  BarChart3,
   Mail,
   ScrollText,
   Settings,
@@ -60,12 +59,6 @@ export const sidebarItems: SidebarItem[] = [
     url: "/queue",
     icon: Inbox,
     roles: ["SUPER_ADMIN", "ADMIN", "USER"],
-  },
-  {
-    title: "Analytics / Insights",
-    url: "/analytics",
-    icon: BarChart3,
-    roles: ["SUPER_ADMIN"],
   },
   {
     title: "Invitation Management",
