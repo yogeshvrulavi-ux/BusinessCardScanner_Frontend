@@ -5,7 +5,7 @@ import { AuthGate } from "@/components/auth/AuthGate";
 export const Route = createFileRoute("/queue")({
   head: () => ({
     meta: [
-      { title: "Sync queue · CardSync AI" },
+      { title: "Sync queue · NameCardScan" },
       {
         name: "description",
         content: "Review and save contacts captured offline or awaiting sync on this device.",
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/queue")({
 
 function QueueRoutePage() {
   return (
-    <AuthGate allowedRoles={["ADMIN", "USER"]}>
+    <AuthGate allowedRoles={["SUPER_ADMIN", "ADMIN", "USER"]}>
       <QueuePage />
     </AuthGate>
   );

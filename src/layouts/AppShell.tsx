@@ -15,6 +15,7 @@ import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { countPendingSync, maybeAutoSyncWhenOnline } from "@/lib/autoSync";
 import { loadUserSettings } from "@/lib/settingsStorage";
 import { useForceLightMode } from "@/hooks/useForceLightMode";
+import { publishOfflineQueueSnapshot } from "@/lib/offlineQueueRegistry";
 export function AppShell() {
   const { queryClient } = useRouteContext({ from: "__root__" });
   const router = useRouter();
@@ -28,6 +29,7 @@ export function AppShell() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (isPublicShellRoute) return;
 
     const routesToPreload = ["/scan", "/contacts", "/queue", "/settings"];
     routesToPreload.forEach((path) => {
@@ -49,6 +51,9 @@ export function AppShell() {
 
     const processAutoSync = async () => {
       if (!navigator.onLine) return;
+
+      // Report before auto-sync removes successful items, then reconcile after.
+      await publishOfflineQueueSnapshot().catch(() => undefined);
 
       const prefs = loadUserSettings();
       if (!prefs.autoSyncQueueWhenOnline) return;
@@ -79,6 +84,7 @@ export function AppShell() {
 
         window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
         window.dispatchEvent(new CustomEvent("cs-queue-updated"));
+        await publishOfflineQueueSnapshot().catch(() => undefined);
       } catch {
         /* auto-sync is best-effort */
       }
@@ -105,15 +111,23 @@ export function AppShell() {
       }
     };
 
+    const reportQueueUpdate = () => {
+      if (navigator.onLine) {
+        void publishOfflineQueueSnapshot().catch(() => undefined);
+      }
+    };
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     window.addEventListener("cs-connection-mode-changed", handleConnectionModeChange);
+    window.addEventListener("cs-queue-updated", reportQueueUpdate);
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("cs-connection-mode-changed", handleConnectionModeChange);
+      window.removeEventListener("cs-queue-updated", reportQueueUpdate);
     };
-  }, [router]);
+  }, [router, isPublicShellRoute]);
 
   if (isPublicShellRoute) {
     return (

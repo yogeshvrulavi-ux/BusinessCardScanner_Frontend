@@ -72,7 +72,7 @@ export function CardThumbnail({
   hasCardImage,
   queueImageDataUrl,
   initials = "?",
-  accent = "from-indigo-500 to-violet-500",
+  accent = "from-cyan-500 to-teal-500",
   className,
   size = "sm",
 }: CardThumbnailProps) {

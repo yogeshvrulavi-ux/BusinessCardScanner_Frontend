@@ -13,12 +13,12 @@ export const Route = createFileRoute("/contacts")({
   validateSearch: contactsSearchSchema,
   head: () => ({
     meta: [
-      { title: "Contact List · CardSync AI" },
+      { title: "Contact List · NameCardScan" },
       {
         name: "description",
         content: "Search, filter, and manage every lead saved on this device.",
       },
-      { property: "og:title", content: "Contact directory · CardSync AI" },
+      { property: "og:title", content: "Contact directory · NameCardScan" },
       {
         property: "og:description",
         content: "Your complete lead library, organised by status and channel.",

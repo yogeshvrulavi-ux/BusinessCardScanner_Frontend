@@ -4,7 +4,7 @@ import { CompaniesPage } from "@/pages/CompaniesPage";
 export const Route = createFileRoute("/companies")({
   head: () => ({
     meta: [
-      { title: "Companies · CardSync AI" },
+      { title: "Companies · NameCardScan" },
       {
         name: "description",
         content: "Manage companies and their admin accounts.",

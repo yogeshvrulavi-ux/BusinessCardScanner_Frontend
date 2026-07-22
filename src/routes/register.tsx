@@ -11,7 +11,7 @@ export const Route = createFileRoute("/register")({
   }),
   head: () => ({
     meta: [
-      { title: "Register · CardSync AI" },
+      { title: "Register · NameCardScan" },
       { name: "description", content: "Accept your invitation and create your account." },
     ],
   }),

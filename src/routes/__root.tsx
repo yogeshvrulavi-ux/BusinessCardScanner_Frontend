@@ -12,14 +12,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "CardSync AI — AI Business Card Scanner" },
+      { title: "NameCardScan — Instant Capture, Sync & Connect" },
       {
         name: "description",
         content:
           "AI-powered offline-first business card scanner with intelligent queueing for enterprise networking.",
       },
-      { name: "author", content: "CardSync AI" },
-      { property: "og:title", content: "CardSync AI" },
+      { name: "author", content: "NameCardScan" },
+      { property: "og:title", content: "NameCardScan" },
       {
         property: "og:description",
         content: "AI-powered offline-first lead capture for enterprise networking events.",
@@ -30,7 +30,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/png", href: "/favicon.png" },
-      { rel: "apple-touch-icon", href: "/logo.png" },
+      { rel: "apple-touch-icon", href: "/logo-mark.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {

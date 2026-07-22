@@ -11,7 +11,7 @@ export const Route = createFileRoute("/events")({
   validateSearch: eventsSearchSchema,
   head: () => ({
     meta: [
-      { title: "Events · CardSync AI" },
+      { title: "Events · NameCardScan" },
       {
         name: "description",
         content: "Browse event folders and view leads collected at each event.",

@@ -42,12 +42,12 @@ export const TERMS_AND_CONDITIONS_SECTIONS: LegalSection[] = [
   {
     heading: "Agreement",
     body:
-      "By using CardSync AI you agree to these Terms and Conditions. If you do not agree, do not use the application.",
+      "By using NameCardScan you agree to these Terms and Conditions. If you do not agree, do not use the application.",
   },
   {
     heading: "Service description",
     body:
-      "CardSync AI lets you scan business cards, extract contact details, save leads to the database, and send follow-up communications through email and WhatsApp."
+      "NameCardScan lets you scan business cards, extract contact details, save leads to the database, and send follow-up communications through email and WhatsApp."
   },
   {
     heading: "Your responsibilities",

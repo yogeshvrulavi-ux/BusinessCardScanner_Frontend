@@ -167,7 +167,7 @@ export function RegisterInvitePage() {
 
       <section className="relative flex h-svh w-full min-w-0 flex-1 flex-col overflow-x-hidden bg-[#f4f7fb] lg:w-[58%]">
         <div className="pointer-events-none absolute inset-0 bg-gradient-surface opacity-50" />
-        <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 max-w-[50%] translate-x-1/4 rounded-full bg-violet-300/15 blur-3xl" />
+        <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 max-w-[50%] translate-x-1/4 rounded-full bg-cyan-300/15 blur-3xl" />
 
         <header className="relative z-10 flex shrink-0 justify-end px-5 py-3 sm:px-10 lg:px-14">
           <div className="text-right text-sm leading-relaxed">
@@ -188,9 +188,9 @@ export function RegisterInvitePage() {
                 <AppLogo size="md" />
                 <div className="leading-tight">
                   <div className="font-display text-lg font-semibold tracking-tight text-[#1e3a5f]">
-                    CardScan
+                    NameCardScan
                   </div>
-                  <div className="text-[11px] text-muted-foreground">Scan · Detect · Extract</div>
+                  <div className="text-[11px] text-muted-foreground">Instant Capture, Sync & Connect</div>
                 </div>
               </div>
 
@@ -216,7 +216,7 @@ export function RegisterInvitePage() {
                   <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                     {error}
                   </p>
-                  <Button asChild variant="outline" className="h-11 w-full rounded-xl">
+                  <Button asChild variant="outline" className="h-9 w-full rounded-md">
                     <Link to="/auth/$pathname" params={{ pathname: "sign-in" }}>
                       Go to sign in
                     </Link>
@@ -304,7 +304,7 @@ export function RegisterInvitePage() {
                     type="submit"
                     disabled={submitting}
                     className={cn(
-                      "h-12 w-full rounded-xl bg-gradient-primary text-base font-semibold shadow-glow",
+                      "h-9 w-full rounded-md bg-gradient-primary text-base font-semibold shadow-glow",
                     )}
                   >
                     {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

@@ -33,7 +33,7 @@ export function AuthPage({ pathname }: { pathname: string }) {
       {/* Right — form panel (full width on mobile) */}
       <section className="relative flex min-h-svh w-full min-w-0 flex-1 flex-col overflow-x-hidden bg-[#f4f7fb] lg:min-h-svh lg:w-[58%]">
         <div className="pointer-events-none absolute inset-0 bg-gradient-surface opacity-50" />
-        <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 max-w-[50%] translate-x-1/4 rounded-full bg-violet-300/15 blur-3xl" />
+        <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 max-w-[50%] translate-x-1/4 rounded-full bg-cyan-300/15 blur-3xl" />
         <div className="pointer-events-none absolute bottom-0 left-0 h-56 w-56 max-w-[50%] rounded-full bg-cyan-300/10 blur-3xl" />
 
         <header className="relative z-10 flex shrink-0 justify-end px-5 py-4 sm:px-10 lg:px-14">

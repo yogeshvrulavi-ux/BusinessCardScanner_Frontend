@@ -8,10 +8,10 @@ export const Route = createFileRoute("/auth/$pathname")({
       {
         title:
           params.pathname === "access-denied"
-            ? "Access Denied · CardSync AI"
+            ? "Access Denied · NameCardScan"
             : params.pathname === "forgot-password"
-              ? "Reset password · CardSync AI"
-              : "Sign in · CardSync AI",
+              ? "Reset password · NameCardScan"
+              : "Sign in · NameCardScan",
       },
     ],
   }),

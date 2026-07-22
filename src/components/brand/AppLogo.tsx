@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 
-const LOGO_SRC = "/logo.png";
+// Emblem-only mark (no wordmark) — fits the small square slots where AppLogo renders.
+const LOGO_SRC = "/logo-mark.png";
 
 const sizeClasses = {
   xs: "h-8 w-8",
@@ -21,7 +22,7 @@ export function AppLogo({
   size = "sm",
   className,
   imageClassName,
-  alt = "CardScan",
+  alt = "NameCardScan",
 }: AppLogoProps) {
   return (
     <div className={cn("shrink-0", className)}>

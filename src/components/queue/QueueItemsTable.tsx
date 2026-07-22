@@ -23,10 +23,33 @@ function formatQueuedAt(iso: string | undefined): string {
   return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 }
 
+/** Who queued this card — from registry attribution fields. */
+function capturedByLabel(item: QueueItem): string {
+  const d = item.contact_data ?? {};
+  const name = String(d.capturedByName || "").trim();
+  const username = String(d.capturedByUsername || "").trim();
+  if (name && username) return `${name} (@${username})`;
+  if (name) return name;
+  if (username) return `@${username}`;
+  return "—";
+}
+
+function organisationLabel(item: QueueItem): string {
+  return String(item.contact_data?.ownerCompanyName || "").trim() || "—";
+}
+
+function isRemoteRegistryItem(item: QueueItem): boolean {
+  return item.id.startsWith("platform:");
+}
+
 type QueueItemsTableProps = {
   items: QueueItem[];
   syncingQueueId: string | null;
   isBusy: boolean;
+  /** Hide Save/Remove for every row (e.g. Super Admin platform view). */
+  readOnly?: boolean;
+  /** Show Captured by + Organisation columns (Admin/Super Admin scoped views). */
+  showOwner?: boolean;
   onSave: (item: QueueItem) => void;
   onRemove: (item: QueueItem) => void;
 };
@@ -35,6 +58,8 @@ export function QueueItemsTable({
   items,
   syncingQueueId,
   isBusy,
+  readOnly = false,
+  showOwner = false,
   onSave,
   onRemove,
 }: QueueItemsTableProps) {
@@ -53,6 +78,12 @@ export function QueueItemsTable({
           <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">Contact</th>
+              {showOwner ? (
+                <>
+                  <th className="px-4 py-3 font-medium">Captured by</th>
+                  <th className="px-4 py-3 font-medium">Organisation</th>
+                </>
+              ) : null}
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Phone</th>
               <th className="px-4 py-3 font-medium">Status</th>
@@ -65,6 +96,7 @@ export function QueueItemsTable({
             {items.map((item) => {
               const isFailed = item.status === "failed";
               const isRetrying = item.status === "retrying";
+              const rowLocked = readOnly || isRemoteRegistryItem(item);
               return (
                 <tr key={item.id} className="transition hover:bg-muted/30">
                   <td className="px-4 py-3">
@@ -76,6 +108,18 @@ export function QueueItemsTable({
                       <div className="mt-1 text-[11px] text-destructive">{item.error_message}</div>
                     ) : null}
                   </td>
+                  {showOwner ? (
+                    <>
+                      <td className="max-w-[12rem] px-4 py-3 text-xs text-muted-foreground">
+                        <div className="truncate font-medium text-foreground">
+                          {capturedByLabel(item)}
+                        </div>
+                      </td>
+                      <td className="max-w-[10rem] truncate px-4 py-3 text-xs text-muted-foreground">
+                        {organisationLabel(item)}
+                      </td>
+                    </>
+                  ) : null}
                   <td className="max-w-[10rem] truncate px-4 py-3 text-muted-foreground">
                     {item.contact_data.email || "—"}
                   </td>
@@ -102,7 +146,7 @@ export function QueueItemsTable({
                         variant="outline"
                         size="sm"
                         onClick={() => onSave(item)}
-                        disabled={syncingQueueId === item.id || isBusy}
+                        disabled={rowLocked || syncingQueueId === item.id || isBusy}
                         className="h-8 rounded-lg text-xs"
                       >
                         {syncingQueueId === item.id ? (
@@ -123,6 +167,7 @@ export function QueueItemsTable({
                         variant="ghost"
                         size="icon"
                         onClick={() => onRemove(item)}
+                        disabled={rowLocked}
                         className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -139,6 +184,7 @@ export function QueueItemsTable({
       <div className="space-y-3 lg:hidden">
         {items.map((item) => {
           const isFailed = item.status === "failed";
+          const rowLocked = readOnly || isRemoteRegistryItem(item);
           return (
             <div
               key={item.id}
@@ -153,6 +199,14 @@ export function QueueItemsTable({
                   <div className="truncate text-[11px] text-muted-foreground">
                     {item.contact_data.company || "No company"}
                   </div>
+                  {showOwner ? (
+                    <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                      By {capturedByLabel(item)}
+                      {organisationLabel(item) !== "—"
+                        ? ` · ${organisationLabel(item)}`
+                        : ""}
+                    </div>
+                  ) : null}
                 </div>
                 <StatusPill status={queueStatusForPill(item.status)} />
               </div>
@@ -170,7 +224,7 @@ export function QueueItemsTable({
                   size="sm"
                   variant={isFailed ? "outline" : "default"}
                   onClick={() => onSave(item)}
-                  disabled={syncingQueueId === item.id || isBusy}
+                  disabled={rowLocked || syncingQueueId === item.id || isBusy}
                   className="h-9 flex-1 rounded-lg text-xs"
                 >
                   {syncingQueueId === item.id ? (
@@ -185,6 +239,7 @@ export function QueueItemsTable({
                   size="sm"
                   variant="ghost"
                   onClick={() => onRemove(item)}
+                  disabled={rowLocked}
                   className="h-9 rounded-lg text-xs text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

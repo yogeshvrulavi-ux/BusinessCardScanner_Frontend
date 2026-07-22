@@ -394,10 +394,10 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                   <p className="text-sm text-white/70">{error}</p>
                 </div>
                 <div className="flex w-full max-w-xs flex-col gap-2">
-                  <Button className="w-full rounded-xl" onClick={restartCamera}>
+                  <Button className="h-9 w-full rounded-md" onClick={restartCamera}>
                     Try again
                   </Button>
-                  <Button variant="outline" className="w-full rounded-xl border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={handleClose}>
+                  <Button variant="outline" className="h-9 w-full rounded-md border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={handleClose}>
                     Use folder upload instead
                   </Button>
                 </div>
@@ -536,10 +536,10 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
               <div className="w-10" />
             </div>
             <div className="absolute inset-x-0 bottom-0 flex gap-3 bg-gradient-to-t from-black/90 to-transparent px-4 pb-8 pt-12">
-              <Button variant="outline" className="flex-1 rounded-xl border-white/30 bg-white/10 text-white hover:bg-white/20" onClick={handleRetake}>
+              <Button variant="outline" className="h-9 flex-1 rounded-md border-white/30 bg-white/10 text-white hover:bg-white/20" onClick={handleRetake}>
                 Retake
               </Button>
-              <Button className="flex-1 rounded-xl bg-gradient-primary shadow-glow" onClick={handleContinue}>
+              <Button className="flex-1 h-9 rounded-md bg-gradient-primary shadow-glow" onClick={handleContinue}>
                 <Check className="mr-2 h-4 w-4" /> Continue
               </Button>
             </div>

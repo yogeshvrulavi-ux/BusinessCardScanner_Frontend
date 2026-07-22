@@ -3,7 +3,7 @@ import { StatusPage } from "@/pages/StatusPage";
 
 export const Route = createFileRoute("/status")({
   head: () => ({
-    meta: [{ title: "API Status · CardSync AI" }],
+    meta: [{ title: "API Status · NameCardScan" }],
   }),
   component: StatusPage,
 });

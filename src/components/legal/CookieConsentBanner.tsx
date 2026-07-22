@@ -63,7 +63,7 @@ export function CookieConsentBanner() {
           <div className="mt-4 flex flex-col gap-2">
             <Button
               size="sm"
-              className="w-full rounded-xl bg-gradient-primary shadow-glow"
+              className="w-full h-9 rounded-md bg-gradient-primary shadow-glow"
               onClick={() => accept(true)}
             >
               Accept all
@@ -71,7 +71,7 @@ export function CookieConsentBanner() {
             <Button
               variant="outline"
               size="sm"
-              className="w-full rounded-xl"
+              className="h-9 w-full rounded-md"
               onClick={() => accept(false)}
             >
               Essential only

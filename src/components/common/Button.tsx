@@ -12,5 +12,5 @@ const classes = {
 } as const;
 
 export const Button = ({ className, variantType = "primary", ...props }: Props) => (
-  <UIButton className={cn("rounded-xl", classes[variantType], className)} {...props} />
+  <UIButton className={cn("h-9 rounded-md", classes[variantType], className)} {...props} />
 );

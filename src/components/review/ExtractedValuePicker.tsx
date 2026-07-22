@@ -138,7 +138,7 @@ export function ExtractedValuePicker({ label, items, onChange }: ExtractedValueP
                   className={cn(
                     "rounded-sm px-2 py-1 text-[11px] font-medium",
                     item.role === "secondary"
-                      ? "bg-violet-500 text-white"
+                      ? "bg-cyan-600 text-white"
                       : "bg-background/60 text-muted-foreground hover:bg-background",
                   )}
                 >

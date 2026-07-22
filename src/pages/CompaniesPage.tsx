@@ -109,14 +109,14 @@ function CompaniesPageInner() {
               variant="outline"
               onClick={() => void load(true)}
               disabled={isRefreshing}
-              className="h-10 rounded-xl"
+              className="h-9 rounded-md"
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
             <Button
               onClick={() => setCreateOpen(true)}
-              className="h-10 rounded-xl bg-gradient-primary"
+              className="h-9 rounded-md bg-gradient-primary"
             >
               <Plus className="mr-2 h-4 w-4" />
               Invite Admin
@@ -140,7 +140,7 @@ function CompaniesPageInner() {
                 Invite a company Admin by email. They set their own password when they register.
               </p>
               <Button
-                className="mt-5 rounded-xl bg-gradient-primary"
+                className="mt-5 h-9 rounded-md bg-gradient-primary"
                 onClick={() => setCreateOpen(true)}
               >
                 <Plus className="mr-2 h-4 w-4" />

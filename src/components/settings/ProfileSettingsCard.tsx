@@ -57,10 +57,10 @@ export function ProfileSettingsCard({
 
   return (
     <Card className="overflow-hidden rounded-2xl border-border/60 shadow-soft lg:col-span-2">
-      <div className="relative border-b border-border/60 bg-gradient-to-br from-primary/8 via-card to-violet-500/5 px-5 py-6 sm:px-8 sm:py-8">
+      <div className="relative border-b border-border/60 bg-gradient-to-br from-primary/8 via-card to-cyan-500/5 px-5 py-6 sm:px-8 sm:py-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
           <div className="relative mx-auto shrink-0 sm:mx-0">
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-primary text-2xl font-semibold text-primary-foreground shadow-glow sm:h-24 sm:w-24">
+            <div className="flex h-20 w-20 items-center justify-center rounded-md bg-gradient-primary text-2xl font-semibold text-primary-foreground shadow-glow sm:h-24 sm:w-24">
               {initials}
             </div>
             <span className="absolute -bottom-1 -right-1 rounded-full border-2 border-background bg-green-500 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
@@ -163,7 +163,7 @@ export function ProfileSettingsCard({
                 value={profile.role}
                 onChange={(e) => onChange("role", e.target.value)}
                 className="h-10 rounded-md border-border/60 bg-background"
-                placeholder="Workspace owner"
+                placeholder="e.g. Sales Manager"
               />
             </Field>
             <Field
@@ -201,7 +201,7 @@ export function ProfileSettingsCard({
           <Button
             onClick={onSave}
             disabled={isSaving}
-            className="w-full rounded-xl bg-gradient-primary shadow-glow sm:w-auto sm:min-w-[140px]"
+            className="w-full h-9 rounded-md bg-gradient-primary shadow-glow sm:w-auto sm:min-w-[140px]"
           >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {isSaving ? "Saving…" : "Save profile"}

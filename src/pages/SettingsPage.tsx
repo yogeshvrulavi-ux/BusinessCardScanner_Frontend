@@ -106,8 +106,6 @@ export function SettingsPage() {
         ? { ...mergedProfile, cookiesAccepted: true }
         : mergedProfile,
     );
-    document.documentElement.classList.remove("dark");
-    localStorage.removeItem("cs-dark");
   }, [authUser?.email, authUser?.first_name, authUser?.last_name]);
 
   const updateProfileField = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
@@ -360,7 +358,7 @@ export function SettingsPage() {
             />
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="rounded-xl" asChild>
+            <Button variant="outline" size="sm" className="h-9 rounded-md" asChild>
               <a
                 href={LEGAL_PAGE_URLS.terms}
                 target="_blank"
@@ -371,7 +369,7 @@ export function SettingsPage() {
                 <ExternalLink className="ml-1 h-3.5 w-3.5 opacity-60" />
               </a>
             </Button>
-            <Button variant="outline" size="sm" className="rounded-xl" asChild>
+            <Button variant="outline" size="sm" className="h-9 rounded-md" asChild>
               <a
                 href={LEGAL_PAGE_URLS.privacy}
                 target="_blank"
@@ -385,7 +383,7 @@ export function SettingsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="rounded-xl"
+              className="h-9 rounded-md"
               onClick={() => setCookiesOpen(true)}
             >
               <Cookie className="mr-2 h-4 w-4" />
@@ -413,7 +411,7 @@ export function SettingsPage() {
             <div className="mt-4 flex w-full flex-col gap-2 sm:mt-0 sm:w-auto sm:flex-row">
               <Button
                 variant="outline"
-                className="w-full rounded-xl sm:w-auto"
+                className="h-9 w-full rounded-md sm:w-auto"
                 onClick={handleClearQueue}
                 disabled={isClearingQueue || isWiping}
               >
@@ -422,7 +420,7 @@ export function SettingsPage() {
               </Button>
               <Button
                 variant="destructive"
-                className="w-full rounded-xl sm:w-auto"
+                className="h-9 w-full rounded-md sm:w-auto"
                 onClick={handleWipeAll}
                 disabled={isWiping || isClearingQueue}
               >

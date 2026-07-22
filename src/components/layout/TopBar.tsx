@@ -1,6 +1,7 @@
 import { UserCircle2, Settings, LogOut, Shield } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { HeaderSearch } from "@/components/layout/HeaderSearch";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/lib/AuthContext";
@@ -98,7 +99,6 @@ export function TopBar() {
     if (typeof window === "undefined") return;
 
     updatePendingCount();
-    document.documentElement.classList.remove("dark");
 
     syncConnectionModeWithNetwork();
     refreshConnectionMode();
@@ -145,7 +145,7 @@ export function TopBar() {
       <div className="flex min-w-0 items-center justify-start">
         <SidebarTrigger
           icon="menu"
-          className="-ml-1 h-9 w-9 rounded-xl border border-border/60 bg-card/60 md:hidden"
+          className="-ml-1 h-9 w-9 rounded-md border border-border/60 bg-card/60 md:hidden"
           aria-label="Open menu"
           title="Open menu"
         />
@@ -163,7 +163,7 @@ export function TopBar() {
 
       <div className="flex items-center justify-end gap-2">
         {pendingCount > 0 && (
-          <div className="flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-2 py-1 text-xs font-medium text-warning-foreground shadow-soft">
+          <div className="flex items-center gap-1.5 rounded-md border border-warning/30 bg-warning/10 px-2 py-1 text-xs font-medium text-warning-foreground shadow-soft">
             <span className="relative flex h-1.5 w-1.5">
               <span className="absolute inline-flex h-full w-full animate-pulse-dot rounded-full bg-warning/60" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-warning" />
@@ -173,11 +173,13 @@ export function TopBar() {
           </div>
         )}
 
+        <ThemeToggle />
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow"
+              className="relative flex h-9 w-9 items-center justify-center rounded-md bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow"
               title={isOnline ? "Online" : "Offline"}
               aria-label={`Profile menu — ${isOnline ? "online" : "offline"}`}
             >
@@ -190,7 +192,7 @@ export function TopBar() {
               />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 rounded-xl">
+          <DropdownMenuContent align="end" className="w-48 rounded-md">
             <DropdownMenuLabel className="flex items-center gap-2">
               <UserCircle2 className="h-4 w-4 shrink-0" />
               <span className="truncate">{displayName}</span>

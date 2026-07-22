@@ -39,8 +39,8 @@ export function AppSidebar() {
           <AppLogo size={collapsed ? "sm" : "md"} />
           {!collapsed && (
             <div className="leading-tight">
-              <div className="font-display text-[15px] font-semibold tracking-tight">CardScan</div>
-              <div className="text-[11px] text-muted-foreground">Scan · Detect · Extract</div>
+              <div className="font-display text-[15px] font-semibold tracking-tight">NameCardScan</div>
+              <div className="text-[11px] text-muted-foreground">Instant Capture, Sync & Connect</div>
             </div>
           )}
         </Link>

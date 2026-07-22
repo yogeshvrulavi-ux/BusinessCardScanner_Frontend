@@ -20,6 +20,17 @@ type AuditLog = {
   actor_role?: string;
 };
 
+/** Username of the acting user; failed logins have no linked user, so fall
+ * back to the identifier the person typed (stored in new_value). */
+function usernameOf(log: AuditLog): string {
+  if (log.actor_username) return log.actor_username;
+  if (log.new_value && typeof log.new_value === "object") {
+    const identifier = (log.new_value as { identifier?: unknown }).identifier;
+    if (typeof identifier === "string" && identifier.trim()) return identifier;
+  }
+  return "";
+}
+
 export function AuditLogsPage() {
   return (
     <AuthGate allowedRoles={["SUPER_ADMIN"]}>
@@ -60,7 +71,7 @@ function AuditLogsPageInner() {
       title="Audit Logs"
       description={total ? `${total} events` : "System-wide invitation and account events"}
       actions={
-        <Button variant="outline" onClick={() => void load(true)} disabled={isRefreshing} className="h-10 rounded-xl">
+        <Button variant="outline" onClick={() => void load(true)} disabled={isRefreshing} className="h-9 rounded-md">
           <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
           Refresh
         </Button>
@@ -102,7 +113,7 @@ function AuditLogsPageInner() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {log.actor_username || "—"}
+                      {usernameOf(log) || "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {log.actor_role?.replaceAll("_", " ") || "—"}

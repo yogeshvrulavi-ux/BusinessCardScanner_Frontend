@@ -1,6 +1,7 @@
 import { useEffect } from "react";
+import { restoreStoredTheme } from "@/lib/theme";
 
-/** Keep auth screens in light mode only (strip .dark from document). */
+/** Keep auth screens in light mode only; restore user theme on leave. */
 export function useForceLightMode(active = true) {
   useEffect(() => {
     if (!active || typeof document === "undefined") return;
@@ -10,7 +11,7 @@ export function useForceLightMode(active = true) {
     root.style.colorScheme = "light";
 
     return () => {
-      root.style.colorScheme = "";
+      restoreStoredTheme();
     };
   }, [active]);
 }

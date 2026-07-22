@@ -27,6 +27,11 @@ export type UserSettings = {
 const STORAGE_KEY = "cs-user-settings";
 /** One-time reset so existing browsers adopt the new outreach-off defaults. */
 const OUTREACH_DEFAULTS_OFF_MIGRATION_KEY = "cs-outreach-defaults-off-v1";
+/** One-time cleanup of old placeholder profile values ("Workspace owner" etc.). */
+const PROFILE_PLACEHOLDERS_MIGRATION_KEY = "cs-profile-placeholders-cleared-v1";
+/** Old defaults that were silently saved as if the user had typed them. */
+const LEGACY_ROLE_PLACEHOLDERS = new Set(["Workspace owner"]);
+const LEGACY_COMPANY_PLACEHOLDERS = new Set(["NameCardScan", "CardSync AI"]);
 
 export const TIMEZONE_OPTIONS = [
   "Pacific Time (US)",
@@ -44,8 +49,8 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   fullName: "",
   email: "",
   phone: "",
-  company: "CardSync AI",
-  role: "Workspace owner",
+  company: "",
+  role: "",
   timezone: "India Standard Time",
   notificationsEnabled: true,
   queueNotificationsEnabled: true,
@@ -69,9 +74,20 @@ export function loadUserSettings(): UserSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       localStorage.setItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY, "1");
+      localStorage.setItem(PROFILE_PLACEHOLDERS_MIGRATION_KEY, "1");
       return { ...DEFAULT_USER_SETTINGS };
     }
     const parsed = JSON.parse(raw) as Partial<UserSettings>;
+
+    // Older versions saved "Workspace owner" / app name as if the user typed
+    // them. Clear those once so the profile shows real (or empty) values.
+    if (!localStorage.getItem(PROFILE_PLACEHOLDERS_MIGRATION_KEY)) {
+      if (parsed.role && LEGACY_ROLE_PLACEHOLDERS.has(parsed.role)) parsed.role = "";
+      if (parsed.company && LEGACY_COMPANY_PLACEHOLDERS.has(parsed.company)) parsed.company = "";
+      localStorage.setItem(PROFILE_PLACEHOLDERS_MIGRATION_KEY, "1");
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed }));
+    }
+
     const autoSyncQueueWhenOnline =
       parsed.autoSyncQueueWhenOnline ??
       DEFAULT_USER_SETTINGS.autoSyncQueueWhenOnline;

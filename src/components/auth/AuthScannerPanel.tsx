@@ -15,7 +15,7 @@ export function AuthScannerPanel() {
       <div className="mb-8 text-center sm:text-left">
         <h2 className="font-display text-3xl font-semibold leading-tight tracking-tight text-white sm:text-4xl">
           Turn business cards
-          <span className="block bg-gradient-to-r from-cyan-300 via-violet-300 to-violet-400 bg-clip-text text-transparent">
+          <span className="block bg-gradient-to-r from-cyan-300 via-cyan-300 to-teal-300 bg-clip-text text-transparent">
             into CRM leads
           </span>
         </h2>
@@ -68,7 +68,7 @@ export function AuthScannerPanel() {
             key={feature}
             className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] text-white/65"
           >
-            <Zap className="h-3 w-3 text-violet-300" />
+            <Zap className="h-3 w-3 text-cyan-300" />
             {feature}
           </span>
         ))}

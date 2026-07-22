@@ -38,7 +38,7 @@ export type Contact = DirectoryContact;
 
 const InitialsAvatar = ({
   initials,
-  accent = "from-indigo-500 to-violet-500",
+  accent = "from-cyan-500 to-teal-500",
   className,
 }: {
   initials?: string;
@@ -258,7 +258,7 @@ export function ContactsPage() {
       }
       actions={
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
-          <Button variant="outline" onClick={() => void reloadContacts({ force: true })} disabled={isRefreshing} className="h-10 w-full rounded-xl sm:w-auto">
+          <Button variant="outline" onClick={() => void reloadContacts({ force: true })} disabled={isRefreshing} className="h-9 w-full rounded-md sm:w-auto">
             <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${isRefreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -277,7 +277,7 @@ export function ContactsPage() {
           </Button>
           <Button
             onClick={() => void navigate({ to: "/scan" })}
-            className="h-10 w-full rounded-xl bg-gradient-primary shadow-glow sm:w-auto"
+            className="h-9 w-full rounded-md bg-gradient-primary shadow-glow sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4 shrink-0" /> New contact
           </Button>
@@ -527,7 +527,7 @@ export function ContactsPage() {
             onClick={() => void handleSyncAllQueue()}
             disabled={isSyncingAll || isRefreshing}
             title="Sync queued contacts to database"
-            className="h-11 shrink-0 rounded-2xl bg-gradient-primary px-3 shadow-glow sm:h-12"
+            className="h-9 shrink-0 rounded-md bg-gradient-primary px-3 shadow-glow"
           >
             {isSyncingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
             <span className="text-sm font-medium">Sync queue ({pendingQueueCount})</span>

@@ -1,4 +1,4 @@
-﻿import { motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RefreshCw,
@@ -40,6 +40,11 @@ import {
   type StoredContact,
 } from "@/lib/contactStorage";
 import { toast } from "sonner";
+import { useAuth, type AuthUser } from "@/lib/AuthContext";
+import {
+  listPlatformOfflineQueue,
+  publishOfflineQueueSnapshot,
+} from "@/lib/offlineQueueRegistry";
 
 function queueItemName(item: QueueItem): string {
   const d = item.contact_data;
@@ -50,8 +55,27 @@ function isSavedOnDevice(contact: StoredContact): boolean {
   return contact.syncStatus === "synced";
 }
 
+function stampLocalOwner(items: QueueItem[], authUser: AuthUser | null): QueueItem[] {
+  if (!authUser) return items;
+  const fullName = `${authUser.first_name || ""} ${authUser.last_name || ""}`.trim();
+  return items.map((item) => ({
+    ...item,
+    contact_data: {
+      ...item.contact_data,
+      capturedByUserId: item.capturedByUserId || authUser.id,
+      capturedByName: item.contact_data?.capturedByName || fullName,
+      capturedByUsername: item.contact_data?.capturedByUsername || "",
+    },
+  }));
+}
+
 export function QueuePage() {
   const { confirm } = useConfirmModal();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const isAdmin = user?.role === "ADMIN";
+  /** Show Captured by / Organisation ? Super Admin (all) and Admin (company). */
+  const showOwner = isSuperAdmin || isAdmin;
   const [contacts, setContacts] = useState<StoredContact[]>([]);
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,15 +88,46 @@ export function QueuePage() {
   const loadData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
       if (!silent) setIsLoading(true);
-      setContacts(await listContacts());
-      setQueueItems(await getQueueItems());
+      const [storedContacts, localQueue] = await Promise.all([
+        listContacts(),
+        getQueueItems(),
+      ]);
+      setContacts(storedContacts);
+
+      // Reporting is best-effort and never blocks the existing local queue.
+      try {
+        await publishOfflineQueueSnapshot(localQueue);
+      } catch {
+        /* The device queue remains fully functional if reporting is unavailable. */
+      }
+
+      if (isSuperAdmin) {
+        // Platform-wide registry (read-only in the table).
+        setQueueItems(await listPlatformOfflineQueue());
+      } else if (isAdmin) {
+        // Company registry + this device's actionable local items.
+        let companyQueue: QueueItem[] = [];
+        try {
+          companyQueue = await listPlatformOfflineQueue();
+        } catch {
+          /* Fall back to local-only if registry is unreachable. */
+        }
+        const localIds = new Set(localQueue.map((item) => item.id));
+        const remoteOthers = companyQueue.filter((item) => {
+          const queueId = item.id.replace(/^platform:[^:]+:/, "");
+          return !localIds.has(queueId);
+        });
+        setQueueItems([...stampLocalOwner(localQueue, user), ...remoteOthers]);
+      } else {
+        setQueueItems(localQueue);
+      }
     } catch (e) {
       console.error("Failed to load queue data:", e);
       if (!silent) toast.error("Failed to refresh queue.");
     } finally {
       if (!silent) setIsLoading(false);
     }
-  }, []);
+  }, [isSuperAdmin, isAdmin, user]);
 
   useEffect(() => {
     void loadData();
@@ -127,13 +182,17 @@ export function QueuePage() {
   };
 
   const saveAllFromQueue = async () => {
+    if (isSuperAdmin) {
+      toast.info("The platform-wide queue is read-only.");
+      return;
+    }
     if (isSavingAll) return;
 
     const unsynced = queueItems.filter(
       (i) => i.status === "pending" || i.status === "retrying",
     );
     if (unsynced.length === 0) {
-      toast.info("Queue is empty — nothing waiting to save.");
+      toast.info("Queue is empty ? nothing waiting to save.");
       return;
     }
 
@@ -154,6 +213,10 @@ export function QueuePage() {
   };
 
   const handleSaveQueueItem = async (item: QueueItem) => {
+    if (isSuperAdmin || item.id.startsWith("platform:")) {
+      toast.info("Platform queue records are read-only.");
+      return;
+    }
     setSyncingQueueId(item.id);
     try {
       await syncOneQueueItem(item);
@@ -170,6 +233,10 @@ export function QueuePage() {
   };
 
   const handleRemoveQueueItem = async (item: QueueItem) => {
+    if (isSuperAdmin || item.id.startsWith("platform:")) {
+      toast.info("Platform queue records are read-only.");
+      return;
+    }
     const ok = await confirm({
       title: "Remove from queue?",
       description: `Remove "${queueItemName(item)}" from the queue?`,
@@ -188,7 +255,8 @@ export function QueuePage() {
   };
 
   const stats = useMemo(() => {
-    const waiting = queueItems.filter(
+    const actionable = queueItems.filter((i) => !i.id.startsWith("platform:"));
+    const waiting = actionable.filter(
       (i) => i.status === "pending" || i.status === "retrying",
     ).length;
     const failed = queueItems.filter((i) => i.status === "failed").length;
@@ -300,8 +368,8 @@ export function QueuePage() {
             <div className="flex flex-wrap gap-2">
               <Button
                 onClick={() => void saveAllFromQueue()}
-                disabled={isBusy || isLoading || stats.waiting === 0}
-                className="h-10 min-w-0 flex-1 rounded-xl bg-gradient-primary shadow-glow disabled:opacity-50 sm:flex-none"
+                disabled={isSuperAdmin || isBusy || isLoading || stats.waiting === 0}
+                className="h-9 min-w-0 flex-1 rounded-md bg-gradient-primary shadow-glow disabled:opacity-50 sm:flex-none"
               >
                 {isSavingAll ? (
                   <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
@@ -319,7 +387,7 @@ export function QueuePage() {
                 variant="outline"
                 onClick={() => void loadData()}
                 disabled={isLoading}
-                className="h-10 min-w-0 flex-1 rounded-xl sm:flex-none"
+                className="h-9 min-w-0 flex-1 rounded-md sm:flex-none"
               >
                 <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${isLoading ? "animate-spin" : ""}`} />
                 Refresh
@@ -357,7 +425,7 @@ export function QueuePage() {
             <Card className="overflow-hidden rounded-2xl border-border/60 p-4 shadow-soft sm:p-6">
               <div className="mb-3 flex flex-col gap-1 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <div className="text-sm font-medium">Offline → online (this device)</div>
+                  <div className="text-sm font-medium">Offline ? online (this device)</div>
                   <div className="text-xs text-muted-foreground">
                     Captures held offline move into your saved contacts when you save them here.
                   </div>
@@ -426,6 +494,8 @@ export function QueuePage() {
                 items={queueTableItems}
                 syncingQueueId={syncingQueueId}
                 isBusy={isBusy}
+                readOnly={isSuperAdmin}
+                showOwner={showOwner}
                 onSave={(item) => void handleSaveQueueItem(item)}
                 onRemove={(item) => void handleRemoveQueueItem(item)}
               />

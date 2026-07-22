@@ -139,7 +139,7 @@ function UsersPageInner() {
   const roleBadgeColor = (role: string) => {
     switch (role) {
       case "SUPER_ADMIN":
-        return "bg-violet-100 text-violet-700 border-violet-200";
+        return "bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800";
       case "ADMIN":
         return "bg-blue-100 text-blue-700 border-blue-200";
       default:
@@ -174,7 +174,7 @@ function UsersPageInner() {
               variant="outline"
               onClick={() => void load(true)}
               disabled={isRefreshing}
-              className="h-10 rounded-xl"
+              className="h-9 rounded-md"
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh

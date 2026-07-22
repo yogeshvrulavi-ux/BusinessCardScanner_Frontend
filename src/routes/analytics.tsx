@@ -4,7 +4,7 @@ import { InsightsPage } from "@/pages/InsightsPage";
 export const Route = createFileRoute("/analytics")({
   head: () => ({
     meta: [
-      { title: "Insights · CardSync AI" },
+      { title: "Insights · NameCardScan" },
       { name: "description", content: "Contact capture analytics and team performance." },
     ],
   }),

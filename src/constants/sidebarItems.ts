@@ -59,7 +59,7 @@ export const sidebarItems: SidebarItem[] = [
     title: "Offline Queue",
     url: "/queue",
     icon: Inbox,
-    roles: ["ADMIN", "USER"],
+    roles: ["SUPER_ADMIN", "ADMIN", "USER"],
   },
   {
     title: "Analytics / Insights",

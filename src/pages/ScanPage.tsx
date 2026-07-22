@@ -1,4 +1,4 @@
-﻿import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense, useState, useRef, DragEvent, useEffect, useCallback } from "react";
 import { Camera, Upload, ScanLine, Sparkles, FileImage, X, Loader2, CheckCircle2, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -64,7 +64,7 @@ export function ScanPage() {
 
   const formatRecentList = useCallback((contactsData: any[], queueItems: Awaited<ReturnType<typeof getQueueItems>>) => {
     const accents = [
-      "from-indigo-500 to-violet-500",
+      "from-cyan-500 to-teal-500",
       "from-sky-500 to-indigo-500",
       "from-emerald-500 to-teal-500",
       "from-amber-500 to-orange-500",
@@ -185,7 +185,7 @@ export function ScanPage() {
     return true;
   };
 
-  /** Upload icon flow: pick from local folder → OCR as-is → review */
+  /** Upload icon flow: pick from local folder ? OCR as-is ? review */
   const handleUploadFromFolder = async (selectedFile: File) => {
     if (!processFile(selectedFile)) return;
     try {
@@ -198,7 +198,7 @@ export function ScanPage() {
     }
   };
 
-  /** Camera icon flow: capture → OCR as-is → review (camera stays open until Continue) */
+  /** Camera icon flow: capture ? OCR as-is ? review (camera stays open until Continue) */
   const handleCameraCapture = async (capturedFile: File) => {
     setCameraOpen(false);
     if (!processFile(capturedFile)) return;
@@ -230,7 +230,7 @@ export function ScanPage() {
       const captureToasts =
         prefs.notificationsEnabled && prefs.captureNotificationsEnabled;
       if (captureToasts) {
-        toast.info("Extracting contact details from card…");
+        toast.info("Extracting contact details from card�");
       }
       const { scanFileAndStore } = await import("@/lib/scanPipeline");
       await scanFileAndStore(
@@ -317,7 +317,7 @@ export function ScanPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                {greetingText}, <span className="bg-gradient-to-r from-primary to-violet-500 bg-clip-text text-transparent">{firstName}</span>
+                {greetingText}, <span className="bg-gradient-to-r from-primary to-teal-500 bg-clip-text text-transparent">{firstName}</span>
               </h2>
             </div>
             <p className="text-xs text-muted-foreground">{dateStr}</p>
@@ -391,10 +391,10 @@ export function ScanPage() {
                     </div>
                     <div className="text-sm font-medium text-success">Successfully processed</div>
                     <div className="flex flex-col gap-2 mt-4">
-                      <Button asChild className="w-full rounded-xl bg-gradient-primary shadow-glow">
+                      <Button asChild className="w-full h-9 rounded-md bg-gradient-primary shadow-glow">
                         <Link to="/review">Review & Save Contact</Link>
                       </Button>
-                      <Button variant="outline" className="w-full rounded-xl" onClick={clearFile}>
+                      <Button variant="outline" className="h-9 w-full rounded-md" onClick={clearFile}>
                         Scan another card
                       </Button>
                     </div>
@@ -411,7 +411,7 @@ export function ScanPage() {
                   </div>
                 ) : (
                   <div className="mt-6 flex flex-wrap justify-center gap-2 w-full fade-in">
-                    <Button onClick={() => handleProcess()} className="w-full sm:w-auto rounded-xl bg-gradient-primary shadow-glow">
+                    <Button onClick={() => handleProcess()} className="w-full sm:w-auto h-9 rounded-md bg-gradient-primary shadow-glow">
                       <ScanLine className="mr-2 h-4 w-4" /> Process card
                     </Button>
                   </div>
@@ -419,7 +419,7 @@ export function ScanPage() {
               </div>
             ) : (
               <div className="fade-in flex flex-col items-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-glow pointer-events-none">
+                <div className="pointer-events-none mx-auto flex h-14 w-14 items-center justify-center rounded-md bg-gradient-primary text-primary-foreground shadow-glow">
                   <Upload className="h-6 w-6" />
                 </div>
                 <h3 className="mt-5 text-lg font-semibold tracking-tight pointer-events-none">Drop a business card here</h3>
@@ -428,10 +428,10 @@ export function ScanPage() {
                 {error && <div className="mt-4 text-sm text-destructive font-medium bg-destructive/10 px-3 py-1.5 rounded-lg">{error}</div>}
                 
                 <div className="mt-6 flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2 w-full">
-                    <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto rounded-xl bg-gradient-primary shadow-glow">
+                    <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto h-9 rounded-md bg-gradient-primary shadow-glow">
                     <FileImage className="mr-2 h-4 w-4" /> Choose from folder
                   </Button>
-                  <Button variant="outline" onClick={() => setCameraOpen(true)} className="w-full sm:w-auto rounded-xl">
+                  <Button variant="outline" onClick={() => setCameraOpen(true)} className="h-9 w-full sm:w-auto rounded-md">
                     <Camera className="mr-2 h-4 w-4" /> Use camera
                   </Button>
                 </div>
@@ -441,7 +441,7 @@ export function ScanPage() {
 
           <div className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            AI extracts contact details automatically · powered by on-device OCR
+            AI extracts contact details automatically � powered by on-device OCR
           </div>
         </Card>
 
@@ -499,11 +499,11 @@ export function ScanPage() {
 
           <div className="mt-auto pt-4">
             {isComplete ? (
-              <Button asChild className="w-full rounded-xl bg-gradient-primary shadow-glow">
+              <Button asChild className="w-full h-9 rounded-md bg-gradient-primary shadow-glow">
                 <Link to="/review"><ScanLine className="mr-2 h-4 w-4" /> Review extracted details</Link>
               </Button>
             ) : (
-              <Button disabled className="w-full rounded-xl bg-gradient-primary shadow-glow">
+              <Button disabled className="w-full h-9 rounded-md bg-gradient-primary shadow-glow">
                 <ScanLine className="mr-2 h-4 w-4" /> Review extracted details
               </Button>
             )}

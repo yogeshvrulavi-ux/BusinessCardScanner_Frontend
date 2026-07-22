@@ -59,14 +59,14 @@ const FRAGMENT_SHADER = `
     noise = max(.0, noise - .42);
     noise *= (1. - length(vUv - .5) * 0.85);
 
-    // Dark base + CardSync cyan + two violet glows
+    // Dark base + cyan / teal glows (no violet)
     vec3 baseDark = vec3(0.03, 0.05, 0.12);
-    vec3 violet = vec3(0.62, 0.28, 0.95);
-    vec3 violetDeep = vec3(0.38, 0.12, 0.72);
+    vec3 teal = vec3(0.10, 0.55, 0.58);
+    vec3 tealDeep = vec3(0.06, 0.32, 0.40);
     vec3 cyan = vec3(0.10, 0.58, 0.88);
 
-    vec3 glow = mix(violetDeep, mix(violet, cyan, 0.42 + 0.2 * sin(2.0 * u_scroll_progress + 1.2)), noise);
-    glow += violet * (0.15 + 0.08 * sin(2.0 * u_scroll_progress + 1.5));
+    vec3 glow = mix(tealDeep, mix(teal, cyan, 0.42 + 0.2 * sin(2.0 * u_scroll_progress + 1.2)), noise);
+    glow += cyan * (0.15 + 0.08 * sin(2.0 * u_scroll_progress + 1.5));
     vec3 color = baseDark + glow * noise * 1.65;
 
     float vignette = 1.0 - dot(vUv - 0.5, vUv - 0.5) * 0.65;

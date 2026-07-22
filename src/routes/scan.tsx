@@ -18,13 +18,13 @@ export const Route = createFileRoute("/scan")({
   pendingComponent: ScanRoutePending,
   head: () => ({
     meta: [
-      { title: "Capture a card · CardSync AI" },
+      { title: "Capture a card · NameCardScan" },
       {
         name: "description",
         content:
           "Photograph or upload a business card. On-device OCR extracts contact details in seconds.",
       },
-      { property: "og:title", content: "Capture a card · CardSync AI" },
+      { property: "og:title", content: "Capture a card · NameCardScan" },
       {
         property: "og:description",
         content: "Turn business cards into structured leads with intelligent on-device capture.",

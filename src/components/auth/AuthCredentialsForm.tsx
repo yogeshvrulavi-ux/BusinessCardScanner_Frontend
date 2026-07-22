@@ -3,7 +3,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { CircleAlert, Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/lib/AuthContext";
@@ -45,6 +45,7 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
   const { user, isAuthenticated, isLoading, login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState("");
 
   const signInForm = useForm<SignInValues>({
     resolver: zodResolver(signInSchema),
@@ -60,12 +61,15 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
 
   const onSignIn = async (values: SignInValues) => {
     setSubmitting(true);
+    setLoginError("");
     try {
       await login(values.identifier.trim(), values.password);
       invalidateContactsDirectory();
       toast.success("Welcome back!");
     } catch (error) {
-      toast.error(extractErrorMessage(error));
+      const message = extractErrorMessage(error);
+      setLoginError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -77,9 +81,9 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
         <AppLogo size="md" />
         <div className="leading-tight">
           <div className="font-display text-lg font-semibold tracking-tight text-[#1e3a5f]">
-            CardScan
+            NameCardScan
           </div>
-          <div className="text-[11px] text-muted-foreground">Scan · Detect · Extract</div>
+          <div className="text-[11px] text-muted-foreground">Instant Capture, Sync & Connect</div>
         </div>
       </div>
 
@@ -91,6 +95,16 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
           Sign in to continue scanning and syncing contacts.
         </p>
       </div>
+
+      {loginError && (
+        <div
+          role="alert"
+          className="mb-5 flex items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/5 px-3.5 py-3 text-sm text-destructive"
+        >
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{loginError}</span>
+        </div>
+      )}
 
       <form className="space-y-5" onSubmit={signInForm.handleSubmit(onSignIn)} noValidate>
         <AuthField
@@ -151,7 +165,7 @@ function SubmitButton({ loading, label }: { loading: boolean; label: string }) {
       type="submit"
       disabled={loading}
       className={cn(
-        "mt-1 flex h-12 w-full items-center justify-center rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow transition-all",
+        "mt-1 flex h-9 w-full items-center justify-center rounded-md bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow transition-all",
         "hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60",
       )}
     >

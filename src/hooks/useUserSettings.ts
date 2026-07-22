@@ -7,6 +7,16 @@ import {
   type UserSettings,
 } from "@/lib/settingsStorage";
 
+/** "SUPER_ADMIN" → "Super Admin" */
+function formatRole(role: unknown): string {
+  if (typeof role !== "string" || !role.trim()) return "";
+  return role
+    .trim()
+    .split(/[_\s]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export function useUserSettings() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
 
@@ -27,12 +37,14 @@ export function useUserSettings() {
   // Merge auth user info from localStorage if available
   let authEmail = "";
   let authName = "";
+  let authRole = "";
   try {
     const stored = localStorage.getItem("cs_auth_user");
     if (stored) {
       const authUser = JSON.parse(stored);
       authEmail = authUser.email?.trim() || "";
       authName = `${authUser.first_name || ""} ${authUser.last_name || ""}`.trim();
+      authRole = formatRole(authUser.role);
     }
   } catch { /* storage unavailable */ }
 
@@ -40,6 +52,8 @@ export function useUserSettings() {
     ...settings,
     ...(authEmail ? { email: authEmail } : {}),
     ...(authName ? { fullName: authName } : {}),
+    // The account's real role wins over anything typed in the profile form.
+    role: settings.role.trim() || authRole,
   };
 
   return {

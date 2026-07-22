@@ -15,7 +15,7 @@ export type Contact = {
 };
 
 const accents = [
-  "from-indigo-500 to-violet-500",
+  "from-cyan-500 to-teal-500",
   "from-sky-500 to-indigo-500",
   "from-emerald-500 to-teal-500",
   "from-amber-500 to-orange-500",
