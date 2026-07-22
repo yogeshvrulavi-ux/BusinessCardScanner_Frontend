@@ -96,10 +96,7 @@ export function CardImageCell({
   if (!src) {
     return (
       <span
-        className={cn(
-          "inline-flex h-9 w-14 items-center justify-center rounded-md border border-dashed border-border/60 text-muted-foreground/50",
-          className,
-        )}
+        className={cn( "inline-flex w-14 items-center justify-center rounded-md border border-dashed border-border/60 text-muted-foreground/50", className, )}
         title="No card image"
       >
         <ImageOff className="h-3.5 w-3.5" />

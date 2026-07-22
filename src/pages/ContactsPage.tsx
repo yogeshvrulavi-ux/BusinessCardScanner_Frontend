@@ -258,7 +258,7 @@ export function ContactsPage() {
       }
       actions={
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
-          <Button variant="outline" onClick={() => void reloadContacts({ force: true })} disabled={isRefreshing} className="h-9 w-full rounded-md sm:w-auto">
+          <Button variant="outline" onClick={() => void reloadContacts({ force: true })} disabled={isRefreshing} className="w-full rounded-md sm:w-auto">
             <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${isRefreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -277,7 +277,7 @@ export function ContactsPage() {
           </Button>
           <Button
             onClick={() => void navigate({ to: "/scan" })}
-            className="h-9 w-full rounded-md bg-gradient-primary shadow-glow sm:w-auto"
+            className="w-full rounded-md bg-gradient-primary shadow-glow sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4 shrink-0" /> New contact
           </Button>
@@ -490,12 +490,12 @@ export function ContactsPage() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {c.source === "queue" && (
-                      <Button variant="outline" size="sm" onClick={() => handleSyncQueueItem(c.id)} disabled={syncingId === c.id || isSyncingAll} className="h-9 flex-1 min-w-[120px] rounded-lg text-xs sm:flex-none">
+                      <Button variant="outline" size="sm" onClick={() => handleSyncQueueItem(c.id)} disabled={syncingId === c.id || isSyncingAll} className="flex-1 min-w-[120px] rounded-lg text-xs sm:flex-none">
                         {syncingId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Sync to database"}
                       </Button>
                     )}
                     {canDelete && (
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(c)} className="h-9 rounded-lg text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(c)} className="rounded-lg text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
                         <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
                       </Button>
                     )}
@@ -527,7 +527,7 @@ export function ContactsPage() {
             onClick={() => void handleSyncAllQueue()}
             disabled={isSyncingAll || isRefreshing}
             title="Sync queued contacts to database"
-            className="h-9 shrink-0 rounded-md bg-gradient-primary px-3 shadow-glow"
+            className="shrink-0 rounded-md bg-gradient-primary px-3 shadow-glow"
           >
             {isSyncingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
             <span className="text-sm font-medium">Sync queue ({pendingQueueCount})</span>

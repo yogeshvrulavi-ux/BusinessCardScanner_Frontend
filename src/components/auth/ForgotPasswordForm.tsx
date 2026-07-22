@@ -224,7 +224,7 @@ function SubmitButton({ loading, label }: { loading: boolean; label: string }) {
       type="submit"
       disabled={loading}
       className={cn(
-        "mt-1 flex h-9 w-full items-center justify-center rounded-md bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow transition-all",
+        "mt-1 flex h-11 w-full items-center justify-center rounded-md bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow transition-all",
         "hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60",
       )}
     >

@@ -145,7 +145,7 @@ export function TopBar() {
       <div className="flex min-w-0 items-center justify-start">
         <SidebarTrigger
           icon="menu"
-          className="-ml-1 h-9 w-9 rounded-md border border-border/60 bg-card/60 md:hidden"
+          className="-ml-1 h-11 w-11 rounded-md border border-border/60 bg-card/60 md:hidden"
           aria-label="Open menu"
           title="Open menu"
         />

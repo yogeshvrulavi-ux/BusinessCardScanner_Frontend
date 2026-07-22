@@ -8,7 +8,17 @@ frontend:
         - npm install
     build:
       commands:
-        - AMPLIFY=1 npm run build
+        # VITE_API_URL must come from Amplify Console → Hosting → Environment variables.
+        # Never hardcode the API origin here or in app source.
+        - |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "ERROR: VITE_API_URL is not set."
+            echo "Add it in Amplify Console → App settings → Environment variables"
+            echo "Example: VITE_API_URL=https://api.namecardscan.com"
+            exit 1
+          fi
+          echo "Building with VITE_API_URL from Amplify environment"
+          AMPLIFY=1 npm run build
         # TanStack Start SPA mode emits the prerendered shell as _shell.html with
         # server-pass asset hashes. Publish it as index.html and repoint any stale
         # asset refs to the files actually present in dist/client/assets.

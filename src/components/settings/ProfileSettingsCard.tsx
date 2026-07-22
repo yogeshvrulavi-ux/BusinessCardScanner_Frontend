@@ -201,7 +201,7 @@ export function ProfileSettingsCard({
           <Button
             onClick={onSave}
             disabled={isSaving}
-            className="w-full h-9 rounded-md bg-gradient-primary shadow-glow sm:w-auto sm:min-w-[140px]"
+            className="w-full rounded-md bg-gradient-primary shadow-glow sm:w-auto sm:min-w-[140px]"
           >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {isSaving ? "Saving…" : "Save profile"}

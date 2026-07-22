@@ -27,7 +27,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       type="button"
       onClick={() => setMode(toggleTheme())}
       className={cn(
-        "group relative inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-md",
+        "group relative inline-flex h-11 w-11 items-center justify-center overflow-hidden rounded-md",
         "border border-border/70 bg-card/80 text-muted-foreground shadow-soft",
         "transition-all duration-300 hover:border-primary/35 hover:text-foreground hover:shadow-glow",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",

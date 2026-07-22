@@ -369,7 +369,7 @@ export function QueuePage() {
               <Button
                 onClick={() => void saveAllFromQueue()}
                 disabled={isSuperAdmin || isBusy || isLoading || stats.waiting === 0}
-                className="h-9 min-w-0 flex-1 rounded-md bg-gradient-primary shadow-glow disabled:opacity-50 sm:flex-none"
+                className="min-w-0 flex-1 rounded-md bg-gradient-primary shadow-glow disabled:opacity-50 sm:flex-none"
               >
                 {isSavingAll ? (
                   <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
@@ -387,7 +387,7 @@ export function QueuePage() {
                 variant="outline"
                 onClick={() => void loadData()}
                 disabled={isLoading}
-                className="h-9 min-w-0 flex-1 rounded-md sm:flex-none"
+                className="min-w-0 flex-1 rounded-md sm:flex-none"
               >
                 <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${isLoading ? "animate-spin" : ""}`} />
                 Refresh

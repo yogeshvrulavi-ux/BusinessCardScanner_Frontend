@@ -305,15 +305,15 @@ export function EventsPage() {
                   if (e.key === "Enter") handleCreateEvent();
                 }}
                 placeholder={`New event (e.g. ${getExampleEventName()})`}
-                className="h-9 rounded-lg sm:w-56"
+                className="h-10 rounded-lg sm:w-56"
               />
-              <Button type="button" size="sm" onClick={handleCreateEvent} className="h-9 shrink-0 rounded-lg">
+              <Button type="button" size="sm" onClick={handleCreateEvent} className="shrink-0 rounded-lg">
                 <Plus className="mr-1.5 h-4 w-4" />
                 Create
               </Button>
             </div>
             {selectedEventName ? (
-              <Button variant="ghost" size="sm" onClick={clearSelection} className="h-9 rounded-lg">
+              <Button variant="ghost" size="sm" onClick={clearSelection} className="rounded-lg">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 All folders
               </Button>

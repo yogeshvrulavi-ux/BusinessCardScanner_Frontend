@@ -32,13 +32,13 @@ export function NotFoundPage() {
         </p>
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Button asChild className="w-full h-9 rounded-md bg-gradient-primary shadow-glow sm:w-auto">
+          <Button asChild className="w-full rounded-md bg-gradient-primary shadow-glow sm:w-auto">
             <Link to="/scan">
               <ScanLine className="mr-2 h-4 w-4" />
               Go to Scan
             </Link>
           </Button>
-          <Button asChild variant="outline" className="h-9 w-full rounded-md border-border/60 sm:w-auto">
+          <Button asChild variant="outline" className="w-full rounded-md border-border/60 sm:w-auto">
             <Link to="/">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Home

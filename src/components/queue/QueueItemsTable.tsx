@@ -225,7 +225,7 @@ export function QueueItemsTable({
                   variant={isFailed ? "outline" : "default"}
                   onClick={() => onSave(item)}
                   disabled={rowLocked || syncingQueueId === item.id || isBusy}
-                  className="h-9 flex-1 rounded-lg text-xs"
+                  className="flex-1 rounded-lg text-xs"
                 >
                   {syncingQueueId === item.id ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -240,7 +240,7 @@ export function QueueItemsTable({
                   variant="ghost"
                   onClick={() => onRemove(item)}
                   disabled={rowLocked}
-                  className="h-9 rounded-lg text-xs text-muted-foreground hover:text-destructive"
+                  className="rounded-lg text-xs text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>

@@ -174,7 +174,7 @@ function UsersPageInner() {
               variant="outline"
               onClick={() => void load(true)}
               disabled={isRefreshing}
-              className="h-9 rounded-md"
+              className="rounded-md"
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh

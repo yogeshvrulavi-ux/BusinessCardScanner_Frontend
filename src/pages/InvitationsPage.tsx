@@ -146,12 +146,12 @@ function InvitationsPageInner() {
               variant="outline"
               onClick={() => void load(true)}
               disabled={isRefreshing}
-              className="h-9 rounded-md"
+              className="rounded-md"
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button onClick={() => setInviteOpen(true)} className="h-9 rounded-md bg-gradient-primary">
+            <Button onClick={() => setInviteOpen(true)} className="rounded-md bg-gradient-primary">
               <Plus className="mr-2 h-4 w-4" />
               Invite {isSuperAdmin ? "Admin" : "User"}
             </Button>
@@ -181,7 +181,7 @@ function InvitationsPageInner() {
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">
                 Send an invitation by email. The recipient creates their own password.
               </p>
-              <Button className="mt-5 h-9 rounded-md bg-gradient-primary" onClick={() => setInviteOpen(true)}>
+              <Button className="mt-5 rounded-md bg-gradient-primary" onClick={() => setInviteOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Send invitation
               </Button>

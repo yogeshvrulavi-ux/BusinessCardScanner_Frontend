@@ -216,7 +216,7 @@ export function RegisterInvitePage() {
                   <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                     {error}
                   </p>
-                  <Button asChild variant="outline" className="h-9 w-full rounded-md">
+                  <Button asChild variant="outline" className="w-full rounded-md">
                     <Link to="/auth/$pathname" params={{ pathname: "sign-in" }}>
                       Go to sign in
                     </Link>
@@ -303,9 +303,7 @@ export function RegisterInvitePage() {
                   <Button
                     type="submit"
                     disabled={submitting}
-                    className={cn(
-                      "h-9 w-full rounded-md bg-gradient-primary text-base font-semibold shadow-glow",
-                    )}
+                    className={cn( " w-full rounded-md bg-gradient-primary text-base font-semibold shadow-glow", )}
                   >
                     {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     Create account

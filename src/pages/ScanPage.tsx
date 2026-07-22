@@ -307,10 +307,10 @@ export function ScanPage() {
                     </div>
                     <div className="text-sm font-medium text-success">Successfully processed</div>
                     <div className="flex flex-col gap-2 mt-4">
-                      <Button asChild className="w-full h-9 rounded-md bg-gradient-primary shadow-glow">
+                      <Button asChild className="w-full rounded-md bg-gradient-primary shadow-glow">
                         <Link to="/review">Review & Save Contact</Link>
                       </Button>
-                      <Button variant="outline" className="h-9 w-full rounded-md" onClick={clearFile}>
+                      <Button variant="outline" className="w-full rounded-md" onClick={clearFile}>
                         Scan another card
                       </Button>
                     </div>
@@ -327,7 +327,7 @@ export function ScanPage() {
                   </div>
                 ) : (
                   <div className="mt-6 flex flex-wrap justify-center gap-2 w-full fade-in">
-                    <Button onClick={() => handleProcess()} className="w-full sm:w-auto h-9 rounded-md bg-gradient-primary shadow-glow">
+                    <Button onClick={() => handleProcess()} className="w-full sm:w-auto rounded-md bg-gradient-primary shadow-glow">
                       <ScanLine className="mr-2 h-4 w-4" /> Process card
                     </Button>
                   </div>
@@ -344,10 +344,10 @@ export function ScanPage() {
                 {error && <div className="mt-4 text-sm text-destructive font-medium bg-destructive/10 px-3 py-1.5 rounded-lg">{error}</div>}
                 
                 <div className="mt-6 flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2 w-full">
-                    <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto h-9 rounded-md bg-gradient-primary shadow-glow">
+                    <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto rounded-md bg-gradient-primary shadow-glow">
                     <FileImage className="mr-2 h-4 w-4" /> Choose from folder
                   </Button>
-                  <Button variant="outline" onClick={() => setCameraOpen(true)} className="h-9 w-full sm:w-auto rounded-md">
+                  <Button variant="outline" onClick={() => setCameraOpen(true)} className="w-full sm:w-auto rounded-md">
                     <Camera className="mr-2 h-4 w-4" /> Use camera
                   </Button>
                 </div>
@@ -415,11 +415,11 @@ export function ScanPage() {
 
           <div className="mt-auto pt-4">
             {isComplete ? (
-              <Button asChild className="w-full h-9 rounded-md bg-gradient-primary shadow-glow">
+              <Button asChild className="w-full rounded-md bg-gradient-primary shadow-glow">
                 <Link to="/review"><ScanLine className="mr-2 h-4 w-4" /> Review extracted details</Link>
               </Button>
             ) : (
-              <Button disabled className="w-full h-9 rounded-md bg-gradient-primary shadow-glow">
+              <Button disabled className="w-full rounded-md bg-gradient-primary shadow-glow">
                 <ScanLine className="mr-2 h-4 w-4" /> Review extracted details
               </Button>
             )}
