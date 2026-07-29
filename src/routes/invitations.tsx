@@ -1,12 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { InvitationsPage } from "@/pages/InvitationsPage";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+/**
+ * Standalone Invitation Management was removed as a duplicate of
+ * Admin Management / User Management invite actions.
+ * Deep links to /invitations land on User Management.
+ * Invitation APIs remain available for InviteUserModal.
+ */
 export const Route = createFileRoute("/invitations")({
-  head: () => ({
-    meta: [
-      { title: "Invitations · NameCardScan" },
-      { name: "description", content: "Manage invitation-based onboarding." },
-    ],
-  }),
-  component: InvitationsPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/users" });
+  },
 });

@@ -54,7 +54,12 @@ import { emptyScanContact, parseScanContact } from "@/lib/scanResult";
 import { scanFileAndStore } from "@/lib/scanPipeline";
 import { loadScanSession, readFileAsDataUrl, dataUrlToFile, isEmptyScanContact } from "@/lib/scanSession";
 import { EventNameCombobox } from "@/components/review/EventNameCombobox";
+import { EventDaySelect } from "@/components/review/EventDaySelect";
+import { CountryCodeSelect } from "@/components/review/CountryCodeSelect";
 import { loadEvents, resolveEventForSave } from "@/lib/eventStorage";
+import { DEFAULT_EVENT_DAY, normalizeEventDay } from "@/constants/eventDays";
+import { splitPhoneNumber } from "@/lib/phoneCountry";
+import { findCountryByDialCode } from "@/constants/countries";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useConfirmModal } from "@/components/ui/confirm-modal";
 import { cn } from "@/lib/utils";
@@ -75,6 +80,7 @@ const collapsedLayout: FieldSlot[] = [
   { name: "lastName" },
   { name: "designation" },
   { name: "companyName" },
+  { name: "__countryCode__", span: 2 },
   { name: "phoneNumber" },
   { name: "emailAddress" },
   { name: "website" },
@@ -91,6 +97,7 @@ const expandedLayout: FieldSlot[] = [
   { name: "lastName" },
   { name: "designation" },
   { name: "companyName", span: 2 },
+  { name: "__countryCode__", span: 2 },
   { name: "phoneNumber" },
   { name: "secondaryPhoneNumber" },
   { name: "emailAddress" },
@@ -171,8 +178,11 @@ export const ReviewPage = () => {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
-  // Event assignment is optional — always start blank, never prefill a default.
+  // Event assignment is required before save / sync.
   const [eventName, setEventName] = useState("");
+  const [eventDay, setEventDay] = useState(DEFAULT_EVENT_DAY);
+  const [countryCode, setCountryCode] = useState("");
+  const [countryName, setCountryName] = useState("");
   const [eventError, setEventError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const notesRef = useRef("");
@@ -198,9 +208,16 @@ export const ReviewPage = () => {
     const addresses = resolvePickerValues(next.addresses);
     const social = resolvePickerValues(next.social);
 
+    const primarySplit = splitPhoneNumber(phones.primary);
+    const secondarySplit = splitPhoneNumber(phones.secondary);
+    if (primarySplit.countryCode) {
+      setCountryCode(primarySplit.countryCode);
+      setCountryName(primarySplit.countryName);
+    }
+
     form.setMany({
-      phoneNumber: phones.primary,
-      secondaryPhoneNumber: phones.secondary,
+      phoneNumber: primarySplit.localNumber || phones.primary.replace(/\D/g, ""),
+      secondaryPhoneNumber: secondarySplit.localNumber || phones.secondary.replace(/\D/g, ""),
       emailAddress: emails.primary,
       secondaryEmailAddress: emails.secondary,
       website: websites.primary,
@@ -224,6 +241,8 @@ export const ReviewPage = () => {
     };
     setPickers(nextPickers);
     setConfidence(raw.confidence);
+    setCountryCode(raw.countryCode || "");
+    setCountryName(raw.countryName || "");
 
     form.setMany({
       fullName: raw.fullName,
@@ -257,6 +276,24 @@ export const ReviewPage = () => {
   }, [applyScanData]);
 
   const handleFormChange = (name: string, value: string) => {
+    // If the user pastes a full international number into the phone field,
+    // peel the dial code into the Country dropdown and keep the local digits.
+    if (name === "phoneNumber") {
+      const split = splitPhoneNumber(value);
+      if (split.countryCode) {
+        setCountryCode(split.countryCode);
+        setCountryName(
+          split.countryName || findCountryByDialCode(split.countryCode)?.name || "",
+        );
+        form.setValue(name, split.localNumber);
+        setPickers((current) => ({
+          ...current,
+          phones: syncEditedPickerValue(current.phones, "primary", split.localNumber),
+        }));
+        return;
+      }
+    }
+
     form.setValue(name, value);
 
     const pickerTarget: Record<
@@ -319,6 +356,9 @@ export const ReviewPage = () => {
     form.reset(initialValues);
     setPickers(emptyPickers());
     setConfidence({});
+    setCountryCode("");
+    setCountryName("");
+    setEventDay(DEFAULT_EVENT_DAY);
     setOcrWarning(null);
     setDuplicateMatch(null);
     setShowDuplicateModal(false);
@@ -449,6 +489,11 @@ export const ReviewPage = () => {
       lastName: form.values.lastName,
       designation: form.values.designation,
       company: form.values.companyName,
+      countryCode: countryCode.trim(),
+      countryName:
+        countryName.trim() ||
+        findCountryByDialCode(countryCode)?.name ||
+        "",
       phone: form.values.phoneNumber,
       secondaryPhone: form.values.secondaryPhoneNumber,
       email:
@@ -463,6 +508,7 @@ export const ReviewPage = () => {
       gstNumber: form.values.gstNumber,
       notes: notes.trim(),
       eventName: trimmedEvent,
+      eventDay: normalizeEventDay(eventDay),
       eventId: existingEvent?.id,
       ocrEngine: scanMetaRef.current.ocrEngine,
       ocrConfidence: scanMetaRef.current.ocrConfidence,
@@ -611,6 +657,11 @@ export const ReviewPage = () => {
     }
 
     const trimmedEvent = readEventName().trim();
+    if (!trimmedEvent) {
+      setEventError("Event name is required.");
+      error("Please enter an event name before saving.");
+      return;
+    }
     setEventError(null);
 
     if (!form.validate({ fullName })) {
@@ -653,6 +704,20 @@ export const ReviewPage = () => {
   };
 
   const renderFieldSlot = ({ name, span }: FieldSlot) => {
+    if (name === "__countryCode__") {
+      return (
+        <FormRow key="__countryCode__" className={span === 2 ? "md:col-span-2" : ""}>
+          <CountryCodeSelect
+            value={countryCode}
+            onChange={(code, nameValue) => {
+              setCountryCode(code);
+              setCountryName(nameValue);
+            }}
+          />
+        </FormRow>
+      );
+    }
+
     const field = fieldByName.get(name);
     if (!field) return null;
     const spansBoth = span === 2 || (span === undefined && field.component === "TextAreaInput");
@@ -755,12 +820,23 @@ export const ReviewPage = () => {
                 error={eventError || undefined}
               />
 
+              <div className="mt-4">
+                <EventDaySelect value={eventDay} onChange={setEventDay} />
+              </div>
+
               <div className="mt-5 border-t border-border/60 pt-5">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <h3 className="text-sm font-semibold text-foreground">Extracted preview</h3>
                   {isExtracting ? <LoadingSpinner label="Extracting…" /> : null}
                 </div>
-                <OCRPreview values={form.values} />
+                <OCRPreview
+                  values={{
+                    ...form.values,
+                    countryPreview: countryCode
+                      ? `${findCountryByDialCode(countryCode)?.flag || ""} ${countryCode}`.trim()
+                      : "",
+                  }}
+                />
               </div>
 
               <div className="mt-5 border-t border-border/60 pt-5">
@@ -895,7 +971,7 @@ export const ReviewPage = () => {
             )}
 
             <p className="mb-1 mt-2 text-xs text-muted-foreground">
-              Save syncs to the database when online. Event name and notes are stored in the contact record.
+              Save syncs to the database when online. Event name, event day, and notes are stored in the contact record.
             </p>
             <FormActions
               onClear={() => void clearExtractedFields()}

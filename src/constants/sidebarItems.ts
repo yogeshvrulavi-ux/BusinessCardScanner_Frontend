@@ -5,7 +5,6 @@ import {
   ScanLine,
   FolderKanban,
   Inbox,
-  Mail,
   ScrollText,
   Settings,
 } from "lucide-react";
@@ -22,6 +21,9 @@ export type SidebarItem = {
 /**
  * Role-based sidebar. Items are filtered by authenticated user role.
  * Unauthorized routes are still blocked by AuthGate + backend RBAC.
+ *
+ * Invitation actions live under Admin Management / User Management —
+ * there is no separate Invitation Management entry.
  */
 export const sidebarItems: SidebarItem[] = [
   {
@@ -59,12 +61,6 @@ export const sidebarItems: SidebarItem[] = [
     url: "/queue",
     icon: Inbox,
     roles: ["SUPER_ADMIN", "ADMIN", "USER"],
-  },
-  {
-    title: "Invitation Management",
-    url: "/invitations",
-    icon: Mail,
-    roles: ["SUPER_ADMIN", "ADMIN"],
   },
   {
     title: "Audit Logs",

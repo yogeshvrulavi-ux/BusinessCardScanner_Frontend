@@ -1,3 +1,5 @@
+import { splitPhoneNumber } from "@/lib/phoneCountry";
+
 export type ScanContact = {
   name?: string;
   fullName?: string;
@@ -34,6 +36,8 @@ export type ParsedScanResult = {
   lastName: string;
   designation: string;
   companyName: string;
+  countryCode: string;
+  countryName: string;
   phoneNumber: string;
   secondaryPhoneNumber: string;
   emailAddress: string;
@@ -70,8 +74,9 @@ const collapseSpaces = (value: string): string => value.replace(/\s+/g, " ").tri
 const stripAllSpaces = (value: string): string => value.replace(/\s+/g, "");
 
 /**
- * Normalize a phone number: keep an optional leading +country-code separated
- * by one space, drop all other OCR spacing/punctuation between digits.
+ * Normalize a phone number for intermediate OCR handling: keep an optional
+ * leading +country-code separated by one space, drop other OCR spacing.
+ * Final form fields strip the dial code via splitPhoneNumber.
  * "+65 8322 9474" -> "+65 83229474", "8322 9 474" -> "83229474".
  */
 const normalizePhoneValue = (value: string): string => {
@@ -99,7 +104,7 @@ const normalizeList = (values: string[], normalizer: (value: string) => string) 
   unique(values.map(normalizer).filter(Boolean));
 
 export function parseScanContact(raw: ScanContact): ParsedScanResult {
-  const phones = normalizeList(
+  const normalizedPhones = normalizeList(
     [
       ...(raw.phones || []),
       ...(raw.mobileNumbers || []),
@@ -109,6 +114,20 @@ export function parseScanContact(raw: ScanContact): ParsedScanResult {
     ],
     normalizePhoneValue,
   );
+
+  let countryCode = "";
+  let countryName = "";
+  const phones = normalizedPhones
+    .map((phone, index) => {
+      const split = splitPhoneNumber(phone);
+      if (index === 0 && split.countryCode) {
+        countryCode = split.countryCode;
+        countryName = split.countryName;
+      }
+      return split.localNumber || phone.replace(/\D/g, "");
+    })
+    .filter(Boolean);
+
   const emails = normalizeList(
     [...(raw.emails || []), raw.email || "", raw.emailAddress || ""],
     stripAllSpaces,
@@ -133,6 +152,8 @@ export function parseScanContact(raw: ScanContact): ParsedScanResult {
     lastName: lastName || fullName.split(/\s+/).slice(1).join(" ") || "",
     designation: collapseSpaces(raw.designation || ""),
     companyName: collapseSpaces(raw.companyName || raw.company || ""),
+    countryCode,
+    countryName,
     phoneNumber: phones[0] || "",
     secondaryPhoneNumber: phones[1] || "",
     emailAddress: emails[0] || "",

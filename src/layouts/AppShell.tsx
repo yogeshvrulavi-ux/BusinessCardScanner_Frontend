@@ -10,12 +10,16 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { NetworkOfflineBanner } from "@/components/layout/NetworkOfflineBanner";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { ConfirmModalProvider } from "@/components/ui/confirm-modal";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { countPendingSync, maybeAutoSyncWhenOnline } from "@/lib/autoSync";
+import { recordLastSyncTime } from "@/lib/syncStatus";
 import { loadUserSettings } from "@/lib/settingsStorage";
 import { useForceLightMode } from "@/hooks/useForceLightMode";
 import { publishOfflineQueueSnapshot } from "@/lib/offlineQueueRegistry";
+import { registerNameCardScanPwa } from "@/lib/pwa";
+
 export function AppShell() {
   const { queryClient } = useRouteContext({ from: "__root__" });
   const router = useRouter();
@@ -39,18 +43,7 @@ export function AppShell() {
       void router.preloadRoute({ to: path }).catch(() => undefined);
     });
 
-    if ("serviceWorker" in navigator) {
-      if (import.meta.env.DEV) {
-        navigator.serviceWorker
-          .getRegistrations()
-          .then((regs) => Promise.all(regs.map((reg) => reg.unregister())))
-          .then(() => caches.keys())
-          .then((names) => Promise.all(names.map((name) => caches.delete(name))))
-          .catch(() => undefined);
-      } else {
-        navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-      }
-    }
+    registerNameCardScanPwa();
 
     const processAutoSync = async () => {
       if (!navigator.onLine) return;
@@ -71,25 +64,34 @@ export function AppShell() {
           toast.info(`Syncing ${totalPending} contact(s) to database…`);
         }
 
-        const summary = await maybeAutoSyncWhenOnline();
-        if (!summary.ran) return;
+        window.dispatchEvent(new CustomEvent("cs-sync-start"));
+        try {
+          const summary = await maybeAutoSyncWhenOnline();
+          if (!summary.ran) return;
 
-        const synced = summary.queueSynced;
-        const total = summary.queueTotal;
-        if (synced > 0 && showToast) {
-          const remaining = summary.queueRemaining;
-          toast.success(
-            remaining > 0
-              ? `Synced ${synced} of ${total} contact(s). ${remaining} still pending.`
-              : `Synced ${synced} contact(s) to database. Offline queue is empty.`,
-          );
+          const synced = summary.queueSynced;
+          const total = summary.queueTotal;
+          if (synced > 0) {
+            recordLastSyncTime();
+          }
+          if (synced > 0 && showToast) {
+            const remaining = summary.queueRemaining;
+            toast.success(
+              remaining > 0
+                ? `Synced ${synced} of ${total} contact(s). ${remaining} still pending.`
+                : `Synced ${synced} contact(s) to database. Offline queue is empty.`,
+            );
+          }
+
+          window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
+          window.dispatchEvent(new CustomEvent("cs-queue-updated"));
+          await publishOfflineQueueSnapshot().catch(() => undefined);
+        } finally {
+          window.dispatchEvent(new CustomEvent("cs-sync-end"));
         }
-
-        window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
-        window.dispatchEvent(new CustomEvent("cs-queue-updated"));
-        await publishOfflineQueueSnapshot().catch(() => undefined);
       } catch {
         /* auto-sync is best-effort */
+        window.dispatchEvent(new CustomEvent("cs-sync-end"));
       }
     };
 
@@ -148,6 +150,7 @@ export function AppShell() {
           <SidebarInset className="relative flex min-h-svh flex-1 flex-col bg-transparent">
             <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-surface" />
             <div className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+              <InstallPrompt />
               <TopBar />
               <NetworkOfflineBanner />
             </div>

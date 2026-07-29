@@ -10,6 +10,7 @@ import {
 } from "react";
 import { getAuthApiBase } from "@/lib/authConfig";
 import { registerAuthSessionBridge } from "@/lib/authSession";
+import { recordLastSyncTime } from "@/lib/syncStatus";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -257,6 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         maybeAutoSyncWhenOnline()
           .then((summary) => {
             if (summary.ran && summary.queueSynced > 0) {
+              recordLastSyncTime();
               window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
               window.dispatchEvent(new CustomEvent("cs-queue-updated"));
             }

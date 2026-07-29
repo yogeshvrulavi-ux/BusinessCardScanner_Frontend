@@ -1,119 +1,193 @@
-const CACHE_NAME = 'cardsync-cache-v7';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/scan',
-  '/contacts',
-  '/queue',
-  '/settings',
-  '/favicon.png',
-  '/logo.png',
-  '/paddleocr/models/PP-OCRv5_mobile_det_onnx_infer.tar',
-  '/paddleocr/models/PP-OCRv5_mobile_rec_onnx_infer.tar',
-  '/paddleocr/wasm/ort-wasm-simd-threaded.wasm',
-  '/paddleocr/wasm/ort-wasm-simd-threaded.mjs',
-  '/paddleocr/wasm/ort-wasm-simd-threaded.jsep.wasm',
-  '/paddleocr/wasm/ort-wasm-simd-threaded.jsep.mjs',
+/**
+ * NameCardScan Progressive Web App service worker.
+ *
+ * Copied to dist/client as a reliable fallback for TanStack Start / Amplify
+ * builds. vite-plugin-pwa (injectManifest → src/sw.ts) also emits sw.js when
+ * its build hook runs; this file guarantees installability if that hook is skipped.
+ *
+ * - Precaches app shell + logos + offline OCR assets
+ * - Stale-while-revalidate for static assets (JS/CSS/fonts/images)
+ * - Network-first navigation with offline shell fallback
+ * - Never intercepts API / auth network calls
+ * - Auto-activates on deploy (skipWaiting + clients.claim) and drops old caches
+ */
+
+const CACHE_VERSION = "namecardscan-pwa-v1";
+const PRECACHE = [
+  "/",
+  "/scan",
+  "/contacts",
+  "/queue",
+  "/settings",
+  "/events",
+  "/manifest.webmanifest",
+  "/favicon.png",
+  "/logo.png",
+  "/logo-mark.png",
+  "/apple-touch-icon.png",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/icon-192-maskable.png",
+  "/icons/icon-512-maskable.png",
+  "/icons/apple-touch-icon.png",
+  "/paddleocr/models/PP-OCRv5_mobile_det_onnx_infer.tar",
+  "/paddleocr/models/PP-OCRv5_mobile_rec_onnx_infer.tar",
+  "/paddleocr/wasm/ort-wasm-simd-threaded.wasm",
+  "/paddleocr/wasm/ort-wasm-simd-threaded.mjs",
+  "/paddleocr/wasm/ort-wasm-simd-threaded.jsep.wasm",
+  "/paddleocr/wasm/ort-wasm-simd-threaded.jsep.mjs",
 ];
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      // Allow partial failure for non-existent root files (like favicon if missing)
-      return cache.addAll(ASSETS_TO_CACHE).catch(err => {
-        console.warn("[SW] Cache pre-fill warning (continuing installation):", err);
-      });
-    })
-  );
-  self.skipWaiting();
-});
+const API_PREFIXES = [
+  "/api/",
+  "/health",
+  "/contacts",
+  "/integrations",
+  "/admin",
+];
 
-self.addEventListener('activate', (event) => {
+self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
+    (async () => {
+      const cache = await caches.open(CACHE_VERSION);
+      await Promise.all(
+        PRECACHE.map(async (url) => {
+          try {
+            const response = await fetch(url, { cache: "reload" });
+            if (response.ok) await cache.put(url, response);
+          } catch {
+            // Missing optional assets must not block install.
           }
-        })
+        }),
       );
-    })
+      await self.skipWaiting();
+    })(),
   );
-  self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
-  // Only handle GET requests and ignore chrome extensions
-  if (event.request.method !== 'GET' || event.request.url.startsWith('chrome-extension://')) {
-    return;
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((key) => key !== CACHE_VERSION)
+          .map((key) => caches.delete(key)),
+      );
+      await self.clients.claim();
+    })(),
+  );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
   }
+});
+
+function isApiRequest(pathname) {
+  return API_PREFIXES.some(
+    (prefix) =>
+      pathname === prefix ||
+      pathname.startsWith(prefix) ||
+      pathname.startsWith(prefix.replace(/\/$/, "")),
+  );
+}
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
+  if (event.request.url.startsWith("chrome-extension://")) return;
 
   const requestUrl = new URL(event.request.url);
+  if (requestUrl.origin !== self.location.origin) return;
+  if (isApiRequest(requestUrl.pathname)) return;
 
-  // Never intercept cross-origin requests (Render API, etc.) — avoids CORS/SW fetch errors
-  if (requestUrl.origin !== self.location.origin) {
-    return;
-  }
-
-  // Same-origin API paths (Vite dev proxy / combined deploy)
-  if (
-    requestUrl.pathname.startsWith('/api/') ||
-    requestUrl.pathname.startsWith('/health') ||
-    requestUrl.pathname.startsWith('/contacts') ||
-    requestUrl.pathname.startsWith('/integrations') ||
-    requestUrl.pathname.startsWith('/admin')
-  ) {
-    return;
-  }
-
-  // For HTML document navigation requests (e.g. user hits refresh on /contacts)
-  if (event.request.mode === 'navigate') {
+  // HTML navigations: network first, fall back to cached app shell.
+  if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        // Network failed (offline), serve the cached App Shell
-        return caches.match('/').then((response) => {
-          return response || caches.match('/scan');
-        });
-      })
+      (async () => {
+        try {
+          const networkResponse = await fetch(event.request);
+          if (networkResponse && networkResponse.ok) {
+            const cache = await caches.open(CACHE_VERSION);
+            cache.put(event.request, networkResponse.clone());
+            cache.put("/", networkResponse.clone());
+          }
+          return networkResponse;
+        } catch {
+          const cached =
+            (await caches.match(event.request)) ||
+            (await caches.match("/")) ||
+            (await caches.match("/scan"));
+          if (cached) return cached;
+          return new Response(
+            "<!doctype html><title>Offline</title><h1>NameCardScan is offline</h1><p>Reconnect to sync queued contacts.</p>",
+            {
+              headers: { "Content-Type": "text/html; charset=utf-8" },
+              status: 503,
+            },
+          );
+        }
+      })(),
     );
     return;
   }
 
-  // Prefer cache for large OCR assets so airplane-mode scans work after install.
-  const isPaddleAsset = requestUrl.pathname.startsWith('/paddleocr/');
+  const isPaddleAsset = requestUrl.pathname.startsWith("/paddleocr/");
+  const isStaticAsset =
+    isPaddleAsset ||
+    /\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico|woff2?|ttf|otf|map|webmanifest)$/i.test(
+      requestUrl.pathname,
+    ) ||
+    requestUrl.pathname.startsWith("/assets/") ||
+    requestUrl.pathname.startsWith("/icons/");
 
-  // For static assets (JS, CSS, images, fonts, paddleocr models/wasm)
+  if (!isStaticAsset) {
+    event.respondWith(
+      fetch(event.request)
+        .then(async (networkResponse) => {
+          if (
+            networkResponse &&
+            networkResponse.status === 200 &&
+            networkResponse.type === "basic"
+          ) {
+            const cache = await caches.open(CACHE_VERSION);
+            cache.put(event.request, networkResponse.clone());
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request)),
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
+    (async () => {
+      const cached = await caches.match(event.request);
+      if (cached) {
         if (!isPaddleAsset) {
-          // Return cached asset immediately, but fetch updated version in background (Stale-While-Revalidate)
-          fetch(event.request).then((networkResponse) => {
-            if (networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => {
+          fetch(event.request)
+            .then(async (networkResponse) => {
+              if (networkResponse && networkResponse.status === 200) {
+                const cache = await caches.open(CACHE_VERSION);
                 cache.put(event.request, networkResponse);
-              });
-            }
-          }).catch(() => {
-            // Ignore network errors during background refresh
-          });
+              }
+            })
+            .catch(() => undefined);
         }
-        return cachedResponse;
+        return cached;
       }
 
-      // Not in cache: fetch from network and cache for next time
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
-        }
-
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-
-        return networkResponse;
-      });
-    })
+      const networkResponse = await fetch(event.request);
+      if (
+        networkResponse &&
+        networkResponse.status === 200 &&
+        networkResponse.type === "basic"
+      ) {
+        const cache = await caches.open(CACHE_VERSION);
+        cache.put(event.request, networkResponse.clone());
+      }
+      return networkResponse;
+    })(),
   );
 });

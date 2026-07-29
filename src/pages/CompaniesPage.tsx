@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useState } from "react";
-import { Building2, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2, User as UserIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import {
   deleteCompany,
   type Company,
 } from "@/lib/adminApi";
+import { formatPersonDisplay, personInitials } from "@/lib/personDisplay";
 import {
   TABLE_PAGE_SIZE,
   TablePagination,
@@ -24,6 +25,15 @@ export function CompaniesPage() {
     <AuthGate allowedRoles={["SUPER_ADMIN"]}>
       <CompaniesPageInner />
     </AuthGate>
+  );
+}
+
+function adminLabel(company: Company): string {
+  return (
+    formatPersonDisplay({
+      fullName: company.admin_name,
+      email: company.admin_email,
+    }) || "No admin yet"
   );
 }
 
@@ -53,7 +63,7 @@ function CompaniesPageInner() {
         setTotal(res.total);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load companies.");
+      toast.error(err instanceof Error ? err.message : "Failed to load admins.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -65,9 +75,12 @@ function CompaniesPageInner() {
   }, [load]);
 
   const handleDelete = async (company: Company) => {
+    const label = adminLabel(company);
     const ok = await confirm({
       title: "Delete company?",
-      description: `Are you sure you want to delete "${company.company_name}"? This action cannot be undone.`,
+      description: `Are you sure you want to delete the company for "${label}"${
+        company.company_name ? ` (${company.company_name})` : ""
+      }? This action cannot be undone.`,
       confirmLabel: "Delete",
       destructive: true,
     });
@@ -75,7 +88,7 @@ function CompaniesPageInner() {
 
     try {
       await deleteCompany(company.id);
-      toast.success(`Company "${company.company_name}" deleted.`);
+      toast.success(`Company for "${label}" deleted.`);
       void load(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete company.");
@@ -113,14 +126,15 @@ function CompaniesPageInner() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSuccess={() => void load(true)}
+        role="ADMIN"
       />
 
       <PageShell
-        title="Companies"
+        title="Admin Management"
         description={
           total > 0
-            ? `${total} compan${total === 1 ? "y" : "ies"} with admin and user details`
-            : "Manage companies and admin accounts"
+            ? `${total} admin${total === 1 ? "" : "s"}`
+            : "Invite and manage company Admins"
         }
         actions={
           <div className="flex flex-wrap gap-2">
@@ -147,14 +161,14 @@ function CompaniesPageInner() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="mt-3 text-sm text-muted-foreground">Loading companies…</p>
+              <p className="mt-3 text-sm text-muted-foreground">Loading admins…</p>
             </div>
           ) : companies.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent">
-                <Building2 className="h-7 w-7 text-muted-foreground" />
+                <UserIcon className="h-7 w-7 text-muted-foreground" />
               </div>
-              <h3 className="mt-4 font-display text-lg font-semibold">No companies yet</h3>
+              <h3 className="mt-4 font-display text-lg font-semibold">No admins yet</h3>
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">
                 Invite a company Admin by email. They set their own password when they register.
               </p>
@@ -168,13 +182,13 @@ function CompaniesPageInner() {
             </div>
           ) : (
             <>
-              {/* Desktop table */}
+              {/* Desktop table — Admin is the primary identity; company is secondary. */}
               <div className="hidden overflow-x-auto rounded-xl border border-border/60 lg:block">
                 <table className="w-full text-sm">
                   <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
                     <tr>
-                      <th className="px-4 py-3 font-bold text-white">Company</th>
                       <th className="px-4 py-3 font-bold text-white">Admin</th>
+                      <th className="px-4 py-3 font-bold text-white">Designation</th>
                       <th className="px-4 py-3 font-bold text-white">Users</th>
                       <th className="px-4 py-3 font-bold text-white">Code</th>
                       <th className="px-4 py-3 font-bold text-white">Status</th>
@@ -183,105 +197,131 @@ function CompaniesPageInner() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
-                    {companies.map((c) => (
-                      <tr key={c.id} className="transition hover:bg-muted/30">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-xs font-semibold text-primary">
-                              {c.company_name.slice(0, 2).toUpperCase()}
+                    {companies.map((c) => {
+                      const label = adminLabel(c);
+                      const hasAdmin = Boolean(c.admin_name || c.admin_email);
+                      return (
+                        <tr key={c.id} className="transition hover:bg-muted/30">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-xs font-semibold text-primary">
+                                {personInitials({
+                                  fullName: c.admin_name,
+                                  email: c.admin_email,
+                                })}
+                              </div>
+                              <div>
+                                <div className="font-medium">
+                                  {hasAdmin ? label : "No admin yet"}
+                                </div>
+                                {hasAdmin && c.admin_email && label !== c.admin_email ? (
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {c.admin_email}
+                                  </div>
+                                ) : null}
+                              </div>
                             </div>
-                            <div>
-                              <div className="font-medium">{c.company_name}</div>
-                              {c.address ? (
-                                <div className="text-[11px] text-muted-foreground">{c.address}</div>
-                              ) : null}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-muted-foreground">
+                              {c.admin_designation?.trim() || "Admin"}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.admin_name || c.admin_email ? (
-                            <div>
-                              <div className="font-medium">{c.admin_name || "—"}</div>
-                              <div className="text-[11px] text-muted-foreground">{c.admin_email || "—"}</div>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground/60">No admin yet</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
-                            {c.user_count ?? 0}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{c.company_code}</code>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge className={`rounded-full border text-[10px] font-medium ${statusColor(c.status)}`}>
-                            {c.status ?? "active"}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">
-                          {formatDate(c.created_at)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => void handleDelete(c)}
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md cursor-pointer"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
+                            {c.admin_department?.trim() ? (
+                              <div className="text-[11px] text-muted-foreground/80">
+                                {c.admin_department.trim()}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
+                              {c.user_count ?? 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{c.company_code}</code>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge className={`rounded-full border text-[10px] font-medium ${statusColor(c.status)}`}>
+                              {c.status ?? "active"}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                            {formatDate(c.created_at)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => void handleDelete(c)}
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md cursor-pointer"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               {/* Mobile cards */}
               <div className="space-y-3 lg:hidden">
-                {companies.map((c) => (
-                  <div
-                    key={c.id}
-                    className="rounded-xl border border-border/60 bg-card/40 p-4"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary">
-                        {c.company_name.slice(0, 2).toUpperCase()}
+                {companies.map((c) => {
+                  const label = adminLabel(c);
+                  const hasAdmin = Boolean(c.admin_name || c.admin_email);
+                  return (
+                    <div
+                      key={c.id}
+                      className="rounded-xl border border-border/60 bg-card/40 p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary">
+                          {personInitials({
+                            fullName: c.admin_name,
+                            email: c.admin_email,
+                          })}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate font-medium">
+                              {hasAdmin ? label : "No admin yet"}
+                            </span>
+                            <Badge className={`shrink-0 rounded-full border text-[10px] font-medium ${statusColor(c.status)}`}>
+                              {c.status ?? "active"}
+                            </Badge>
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {c.admin_designation?.trim() || "Admin"}
+                            {c.admin_department?.trim()
+                              ? ` · ${c.admin_department.trim()}`
+                              : ""}
+                            {" · "}
+                            <code className="rounded bg-muted px-1 py-0.5 text-[10px] font-mono">{c.company_code}</code>
+                          </div>
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            {hasAdmin && c.admin_email && label !== c.admin_email
+                              ? `${c.admin_email} · `
+                              : ""}
+                            {c.user_count ?? 0} user{(c.user_count ?? 0) === 1 ? "" : "s"}
+                            {" · "}Created {formatDate(c.created_at)}
+                          </div>
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate font-medium">{c.company_name}</span>
-                          <Badge className={`shrink-0 rounded-full border text-[10px] font-medium ${statusColor(c.status)}`}>
-                            {c.status ?? "active"}
-                          </Badge>
-                        </div>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          <code className="rounded bg-muted px-1 py-0.5 text-[10px] font-mono">{c.company_code}</code>
-                          {c.admin_email ? ` · ${c.admin_email}` : c.email ? ` · ${c.email}` : ""}
-                        </div>
-                        <div className="mt-1 text-[11px] text-muted-foreground">
-                          {c.admin_name ? `Admin: ${c.admin_name} · ` : ""}
-                          {c.user_count ?? 0} user{(c.user_count ?? 0) === 1 ? "" : "s"}
-                          {" · "}Created {formatDate(c.created_at)}
-                        </div>
+                      <div className="mt-3 flex gap-2 border-t border-border/40 pt-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void handleDelete(c)}
+                          className="h-8 rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                          Delete
+                        </Button>
                       </div>
                     </div>
-                    <div className="mt-3 flex gap-2 border-t border-border/40 pt-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => void handleDelete(c)}
-                        className="h-8 rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <TablePagination

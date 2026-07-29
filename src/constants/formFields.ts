@@ -17,7 +17,7 @@ export const leadFields: LeadField[] = [
   { label: "Last Name", name: "lastName", type: "text", component: "TextInput", placeholder: "Last name", section: "basic", confidenceKey: "lastName" },
   { label: "Designation", name: "designation", type: "text", component: "TextInput", placeholder: "Job title", section: "basic", confidenceKey: "designation" },
   { label: "Company Name", name: "companyName", type: "text", component: "TextInput", required: true, placeholder: "Company", section: "company", confidenceKey: "companyName" },
-  { label: "Primary Phone", name: "phoneNumber", type: "tel", component: "PhoneInput", required: true, placeholder: "Mobile or phone", section: "contact", confidenceKey: "phoneNumber" },
+  { label: "Primary Phone", name: "phoneNumber", type: "tel", component: "PhoneInput", required: true, placeholder: "Phone number without country code", section: "contact", confidenceKey: "phoneNumber" },
   { label: "Secondary Phone", name: "secondaryPhoneNumber", type: "tel", component: "PhoneInput", placeholder: "Optional second number", section: "contact" },
   { label: "Primary Email", name: "emailAddress", type: "email", component: "EmailInput", required: true, placeholder: "Email address", section: "contact", confidenceKey: "emailAddress" },
   { label: "Secondary Email", name: "secondaryEmailAddress", type: "email", component: "EmailInput", placeholder: "Optional second email", section: "contact" },

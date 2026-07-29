@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig(({ mode, command }) => {
   // vite.config runs before import.meta.env; load .env explicitly
@@ -69,6 +70,35 @@ export default defineConfig(({ mode, command }) => {
       tailwindcss(),
       tanstackStart(isAmplifyBuild ? { spa: { enabled: true } } : undefined),
       react(),
+      // PWA after React/TanStack so the built assets are available for precache.
+      // TanStack Start emits the client bundle under dist/client.
+      VitePWA({
+        strategies: "injectManifest",
+        srcDir: "src",
+        filename: "sw.ts",
+        registerType: "autoUpdate",
+        injectRegister: false,
+        outDir: "dist/client",
+        includeAssets: [
+          "favicon.png",
+          "logo.png",
+          "logo-mark.png",
+          "apple-touch-icon.png",
+          "icons/*.png",
+          "manifest.webmanifest",
+        ],
+        manifest: false,
+        injectManifest: {
+          globDirectory: "dist/client",
+          globPatterns: [
+            "**/*.{js,css,html,ico,png,svg,webp,woff,woff2,ttf,otf,wasm,tar,webmanifest}",
+          ],
+          maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
+        },
+        devOptions: {
+          enabled: true,
+        },
+      }),
     ],
   };
 });

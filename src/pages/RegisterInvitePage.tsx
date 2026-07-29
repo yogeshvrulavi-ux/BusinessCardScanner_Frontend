@@ -59,6 +59,8 @@ export function RegisterInvitePage() {
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [department, setDepartment] = useState("");
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -129,6 +131,8 @@ export function RegisterInvitePage() {
         password,
         confirm_password: confirmPassword,
         phone: phone.trim(),
+        designation: designation.trim(),
+        department: department.trim(),
       });
 
       // Seed Settings/Profile local preferences so post-login Settings stays consistent
@@ -139,7 +143,7 @@ export function RegisterInvitePage() {
         email: result.user.email,
         phone: result.user.phone || phone.trim(),
         company: result.user.company_name || info.company_name || current.company,
-        role: roleLabel || current.role,
+        role: designation.trim() || roleLabel || current.role,
       });
 
       toast.success("Account created. Please sign in.");
@@ -247,6 +251,24 @@ export function RegisterInvitePage() {
                         autoComplete="tel"
                       />
                     </div>
+                    {info.role === "ADMIN" ? (
+                      <div className="grid gap-3.5 sm:grid-cols-2">
+                        <AuthField
+                          label="Designation"
+                          value={designation}
+                          onChange={(e) => setDesignation(e.target.value)}
+                          placeholder="e.g. Sales Manager"
+                          autoComplete="organization-title"
+                        />
+                        <AuthField
+                          label="Department"
+                          value={department}
+                          onChange={(e) => setDepartment(e.target.value)}
+                          placeholder="e.g. Sales"
+                          autoComplete="organization"
+                        />
+                      </div>
+                    ) : null}
                     <AuthField
                       label="Email"
                       type="email"

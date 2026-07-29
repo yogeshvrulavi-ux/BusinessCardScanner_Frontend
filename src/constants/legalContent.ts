@@ -7,7 +7,7 @@ export const LEGAL_PAGE_URLS = {
 } as const;
 
 export const LEGAL_CONTACT_NAME = "Ullavi";
-export const LEGAL_CONTACT_EMAIL = "supportulavi@gmail.com";
+export const LEGAL_CONTACT_EMAIL = "support@ulavitech.com";
 export const LEGAL_CONTACT_PHONE = "+91 8838747273";
 export const LEGAL_CONTACT_PHONE_TEL = "+91 88387 47273";
 

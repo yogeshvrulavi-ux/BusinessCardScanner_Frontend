@@ -26,10 +26,12 @@ import {
   syncConnectionModeWithNetwork,
   type ConnectionMode,
 } from "@/lib/connectionMode";
+import { ConnectivityStatus } from "@/components/pwa/ConnectivityStatus";
 
 export function TopBar() {
   const [connectionMode, setConnectionModeState] = useState<ConnectionMode>("online");
   const [pendingCount, setPendingCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
   const { fullName: profileName, initials: profileInitials } = useUserSettings();
   const { user, logout } = useAuth();
   const isMobile = useIsMobile();
@@ -118,17 +120,23 @@ export function TopBar() {
     };
 
     const handleModeChanged = () => refreshConnectionMode();
+    const handleSyncStart = () => setIsSyncing(true);
+    const handleSyncEnd = () => setIsSyncing(false);
 
     window.addEventListener("online", handleNetworkOnline);
     window.addEventListener("offline", handleNetworkOffline);
     window.addEventListener(CONNECTION_MODE_CHANGED, handleModeChanged);
     window.addEventListener("cs-queue-updated", updatePendingCount);
+    window.addEventListener("cs-sync-start", handleSyncStart);
+    window.addEventListener("cs-sync-end", handleSyncEnd);
 
     return () => {
       window.removeEventListener("online", handleNetworkOnline);
       window.removeEventListener("offline", handleNetworkOffline);
       window.removeEventListener(CONNECTION_MODE_CHANGED, handleModeChanged);
       window.removeEventListener("cs-queue-updated", updatePendingCount);
+      window.removeEventListener("cs-sync-start", handleSyncStart);
+      window.removeEventListener("cs-sync-end", handleSyncEnd);
     };
   }, [refreshConnectionMode]);
 
@@ -162,6 +170,8 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center justify-end gap-2">
+        <ConnectivityStatus compact syncing={isSyncing} />
+
         {pendingCount > 0 && (
           <div className="flex items-center gap-1.5 rounded-md border border-warning/30 bg-warning/10 px-2 py-1 text-xs font-medium text-warning-foreground shadow-soft">
             <span className="relative flex h-1.5 w-1.5">
