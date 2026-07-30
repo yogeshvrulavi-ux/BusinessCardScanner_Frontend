@@ -3,6 +3,7 @@ import {
   KeyRound,
   Loader2,
   Pencil,
+  Plus,
   RefreshCw,
   Search,
   Trash2,
@@ -18,6 +19,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { EditUserModal } from "@/components/admin/EditUserModal";
 import { ResetPasswordModal } from "@/components/admin/ResetPasswordModal";
+import { InviteUserModal } from "@/components/admin/InviteUserModal";
 import { useConfirmModal } from "@/components/ui/confirm-modal";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/AuthContext";
@@ -27,11 +29,29 @@ import {
   updateUserStatus,
   type User,
 } from "@/lib/adminApi";
+import { formatPersonDisplay, personInitials } from "@/lib/personDisplay";
 import {
   TABLE_PAGE_SIZE,
   TablePagination,
   clampPageAfterDelete,
 } from "@/components/ui/table-pagination";
+
+function userDisplayName(user: User): string {
+  return (
+    formatPersonDisplay({
+      firstName: user.first_name,
+      lastName: user.last_name,
+      email: user.email,
+    }) || user.email
+  );
+}
+
+function adminOfUserLabel(user: User): string {
+  return formatPersonDisplay({
+    fullName: user.admin_name,
+    email: user.admin_email,
+  });
+}
 
 export function UsersPage() {
   return (
@@ -56,6 +76,7 @@ function UsersPageInner() {
   // Modal state
   const [editUser, setEditUser] = useState<User | null>(null);
   const [resetUser, setResetUser] = useState<User | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const load = useCallback(async (silent = false, pageOverride?: number) => {
     const targetPage = pageOverride ?? page;
@@ -108,9 +129,10 @@ function UsersPageInner() {
   }, [users, isSuperAdmin]);
 
   const handleDelete = async (user: User) => {
+    const label = userDisplayName(user);
     const ok = await confirm({
       title: "Delete user?",
-      description: `Are you sure you want to delete "${user.first_name} ${user.last_name}"? This will soft-delete the user.`,
+      description: `Are you sure you want to delete "${label}"? This will soft-delete the user.`,
       confirmLabel: "Delete",
       destructive: true,
     });
@@ -118,7 +140,7 @@ function UsersPageInner() {
 
     try {
       await deleteUser(user.id);
-      toast.success(`User "${user.first_name} ${user.last_name}" deleted.`);
+      toast.success(`User "${label}" deleted.`);
       void load(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete user.");
@@ -127,11 +149,12 @@ function UsersPageInner() {
 
   const handleToggleActive = async (user: User) => {
     const next = !user.is_active;
+    const label = userDisplayName(user);
     const ok = await confirm({
       title: next ? "Activate user?" : "Deactivate user?",
       description: next
-        ? `"${user.first_name} ${user.last_name}" will be able to log in again.`
-        : `"${user.first_name} ${user.last_name}" will be signed out and cannot log in.`,
+        ? `"${label}" will be able to log in again.`
+        : `"${label}" will be signed out and cannot log in.`,
       confirmLabel: next ? "Activate" : "Deactivate",
       destructive: !next,
     });
@@ -177,6 +200,12 @@ function UsersPageInner() {
 
   return (
     <>
+      <InviteUserModal
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        onSuccess={() => void load(true)}
+        role="USER"
+      />
       <EditUserModal
         open={!!editUser}
         onOpenChange={(v) => { if (!v) setEditUser(null); }}
@@ -191,13 +220,13 @@ function UsersPageInner() {
       />
 
       <PageShell
-        title="Users"
+        title="User Management"
         description={
           adminSummary
             ? `${adminSummary.adminCount} admin${adminSummary.adminCount === 1 ? "" : "s"} · ${adminSummary.userTotal} user${adminSummary.userTotal === 1 ? "" : "s"}`
             : total > 0
               ? `${total} user${total === 1 ? "" : "s"} total`
-              : "Manage users and permissions"
+              : "Invite and manage users"
         }
         actions={
           <div className="flex flex-wrap gap-2">
@@ -210,7 +239,13 @@ function UsersPageInner() {
               <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-           
+            <Button
+              onClick={() => setInviteOpen(true)}
+              className="rounded-md bg-gradient-primary"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Invite User
+            </Button>
           </div>
         }
       >
@@ -242,8 +277,15 @@ function UsersPageInner() {
               </div>
               <h3 className="mt-4 font-display text-lg font-semibold">No users yet</h3>
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                Users appear here after they accept an invitation and register.
+                Invite a user by email. They appear here after they accept and register.
               </p>
+              <Button
+                className="mt-5 rounded-md bg-gradient-primary"
+                onClick={() => setInviteOpen(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Invite User
+              </Button>
             </div>
           ) : (
             <>
@@ -267,16 +309,25 @@ function UsersPageInner() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
-                    {filtered.map((u) => (
+                    {filtered.map((u) => {
+                      const label = userDisplayName(u);
+                      const adminLabel = adminOfUserLabel(u);
+                      return (
                       <tr key={u.id} className="transition hover:bg-muted/30">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-xs font-semibold text-primary">
-                              {(u.first_name?.[0] ?? "").toUpperCase()}{(u.last_name?.[0] ?? "").toUpperCase()}
+                              {personInitials({
+                                firstName: u.first_name,
+                                lastName: u.last_name,
+                                email: u.email,
+                              })}
                             </div>
                             <div>
-                              <div className="font-medium">{u.first_name} {u.last_name}</div>
-                              <div className="text-[11px] text-muted-foreground">{u.email}</div>
+                              <div className="font-medium">{label}</div>
+                              {label !== u.email ? (
+                                <div className="text-[11px] text-muted-foreground">{u.email}</div>
+                              ) : null}
                             </div>
                           </div>
                         </td>
@@ -301,10 +352,12 @@ function UsersPageInner() {
                                   </div>
                                   <div className="text-[11px] text-muted-foreground">{u.email}</div>
                                 </div>
-                              ) : u.admin_name || u.admin_email ? (
+                              ) : adminLabel ? (
                                 <div>
-                                  <div className="font-medium text-foreground">{u.admin_name || "Admin"}</div>
-                                  <div className="text-[11px] text-muted-foreground">{u.admin_email || "—"}</div>
+                                  <div className="font-medium text-foreground">{adminLabel}</div>
+                                  {u.admin_email && adminLabel !== u.admin_email ? (
+                                    <div className="text-[11px] text-muted-foreground">{u.admin_email}</div>
+                                  ) : null}
                                 </div>
                               ) : (
                                 <span className="text-muted-foreground">—</span>
@@ -371,37 +424,47 @@ function UsersPageInner() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               {/* Mobile cards */}
               <div className="space-y-3 lg:hidden">
-                {filtered.map((u) => (
+                {filtered.map((u) => {
+                  const label = userDisplayName(u);
+                  const adminLabel = adminOfUserLabel(u);
+                  return (
                   <div
                     key={u.id}
                     className="rounded-xl border border-border/60 bg-card/40 p-4"
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary">
-                        {(u.first_name?.[0] ?? "").toUpperCase()}{(u.last_name?.[0] ?? "").toUpperCase()}
+                        {personInitials({
+                          firstName: u.first_name,
+                          lastName: u.last_name,
+                          email: u.email,
+                        })}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate font-medium">{u.first_name} {u.last_name}</span>
+                          <span className="truncate font-medium">{label}</span>
                           <Badge className={`shrink-0 rounded-full border text-[10px] font-medium ${roleBadgeColor(u.role)}`}>
                             {roleLabel(u.role)}
                           </Badge>
                         </div>
-                        <div className="mt-0.5 truncate text-xs text-muted-foreground">{u.email}</div>
+                        {label !== u.email ? (
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">{u.email}</div>
+                        ) : null}
                         {isSuperAdmin ? (
                           <div className="mt-1 text-[11px] text-muted-foreground">
                             {u.company_name || "No company"}
                             {u.role === "ADMIN"
                               ? ` · ${u.user_count ?? 0} user${(u.user_count ?? 0) === 1 ? "" : "s"}`
-                              : u.admin_name
-                                ? ` · Admin: ${u.admin_name}`
+                              : adminLabel
+                                ? ` · Admin: ${adminLabel}`
                                 : ""}
                           </div>
                         ) : null}
@@ -461,7 +524,8 @@ function UsersPageInner() {
                       </Button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {filtered.length === 0 && search && (

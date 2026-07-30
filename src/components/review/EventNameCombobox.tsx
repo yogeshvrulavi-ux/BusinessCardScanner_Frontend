@@ -22,7 +22,7 @@ export const EventNameCombobox = forwardRef<HTMLInputElement, EventNameComboboxP
   return (
     <div className="space-y-2">
       <label htmlFor={listId} className="text-sm font-medium text-foreground">
-        Event name <span className="font-normal text-muted-foreground">(optional)</span>
+        Event name <span className="text-destructive" aria-hidden>*</span>
       </label>
       <div className="relative">
         <Input
@@ -30,6 +30,8 @@ export const EventNameCombobox = forwardRef<HTMLInputElement, EventNameComboboxP
           id={listId}
           name="eventName"
           type="text"
+          required
+          aria-required="true"
           list={eventNames.length > 0 ? `${listId}-events` : undefined}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -55,7 +57,7 @@ export const EventNameCombobox = forwardRef<HTMLInputElement, EventNameComboboxP
         </datalist>
       ) : null}
       <p className="text-xs text-muted-foreground">
-        Optional. When set, saved to the contact's event field. Events page groups leads by this event.
+        Required. Saved to the contact&apos;s event field and used as the Google Sheets workbook name.
       </p>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>

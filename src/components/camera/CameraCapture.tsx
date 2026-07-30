@@ -10,6 +10,7 @@ import {
   ALIGN_MIN_SHARPNESS,
   CARD_ASPECT,
   CARD_DETECT_MIN_SCORE,
+  applyBestCameraTrackSettings,
   getAlignmentProgress,
   getAlignmentStatus,
   getCenteredCardCropRegion,
@@ -19,6 +20,7 @@ import {
   initialWebcamConstraintTier,
   isMobileDevice,
   pickDefaultFacingMode,
+  triggerCameraAutofocus,
   type AlignmentStatus,
 } from "@/lib/cardFrameAnalysis";
 import { cn } from "@/lib/utils";
@@ -30,6 +32,10 @@ type CameraCaptureProps = {
 };
 
 type Phase = "live" | "preview";
+
+/** Near-lossless JPEG for OCR; storage compression happens after OCR. */
+const CAPTURE_JPEG_QUALITY = 0.98;
+const NO_FOCUS_SETTLE_MS = 400;
 
 const STATUS_COPY: Record<AlignmentStatus, { title: string; hint: string }> = {
   searching: {
@@ -70,13 +76,44 @@ function mapCameraError(err: string | DOMException): string {
   return "Could not access the camera.";
 }
 
-function canvasToJpegFile(canvas: HTMLCanvasElement, name: string): File | null {
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-  const byteString = atob(dataUrl.split(",")[1]);
-  const ab = new ArrayBuffer(byteString.length);
-  const ia = new Uint8Array(ab);
-  for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-  return new File([ab], name, { type: "image/jpeg" });
+function canvasToHighQualityFile(
+  canvas: HTMLCanvasElement,
+  name: string,
+): Promise<File | null> {
+  return new Promise((resolve) => {
+    // Prefer PNG (no compression) for OCR; fall back to high-quality JPEG.
+    canvas.toBlob(
+      (pngBlob) => {
+        if (pngBlob && pngBlob.size > 0) {
+          resolve(
+            new File([pngBlob], name.replace(/\.jpe?g$/i, ".png"), {
+              type: "image/png",
+            }),
+          );
+          return;
+        }
+        canvas.toBlob(
+          (jpegBlob) => {
+            resolve(
+              jpegBlob
+                ? new File([jpegBlob], name.replace(/\.png$/i, ".jpg"), {
+                    type: "image/jpeg",
+                  })
+                : null,
+            );
+          },
+          "image/jpeg",
+          CAPTURE_JPEG_QUALITY,
+        );
+      },
+      "image/png",
+    );
+  });
+}
+
+function getStreamFromVideo(video: HTMLVideoElement | null): MediaStream | null {
+  const src = video?.srcObject;
+  return src instanceof MediaStream ? src : null;
 }
 
 export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) {
@@ -103,6 +140,8 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const [stableCount, setStableCount] = useState(0);
   const [alignmentStatus, setAlignmentStatus] = useState<AlignmentStatus>("searching");
   const [streamReady, setStreamReady] = useState(false);
+  const [captureHint, setCaptureHint] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   phaseRef.current = phase;
   facingModeRef.current = facingMode;
@@ -125,10 +164,12 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     setSharpness(0);
     setCardScore(0);
     setAlignmentStatus("searching");
+    setCaptureHint(null);
+    setIsCapturing(false);
   }, []);
 
-  /** Capture only the centered card frame — not the full camera view. */
-  const snapFrame = useCallback((): File | null => {
+  /** Capture only the centered card frame at the stream's native resolution. */
+  const snapFrame = useCallback(async (): Promise<File | null> => {
     const video = getVideo();
     if (!video || video.videoWidth === 0) return null;
 
@@ -144,9 +185,11 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     canvas.height = sh;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
+    // Preserve sharpness — do not smooth when copying 1:1 from the video frame.
+    ctx.imageSmoothingEnabled = false;
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
 
-    return canvasToJpegFile(canvas, `card-capture-${Date.now()}.jpg`);
+    return canvasToHighQualityFile(canvas, `card-capture-${Date.now()}.png`);
   }, [getVideo]);
 
   const enterPreview = useCallback(
@@ -156,17 +199,42 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
       setPreviewUrl(URL.createObjectURL(file));
       phaseRef.current = "preview";
       setPhase("preview");
+      setCaptureHint(null);
+      setIsCapturing(false);
     },
     [stopAnalysis],
   );
 
-  const triggerCapture = useCallback(() => {
+  const triggerCapture = useCallback(async () => {
     if (phaseRef.current !== "live" || autoCaptureLockedRef.current) return;
     autoCaptureLockedRef.current = true;
-    const file = snapFrame();
+    setIsCapturing(true);
+
+    const video = getVideo();
+    const stream = getStreamFromVideo(video);
+    let focused = false;
+    try {
+      setCaptureHint("Focusing… hold steady");
+      focused = await triggerCameraAutofocus(stream);
+      if (!focused) {
+        setCaptureHint("Hold the camera steady…");
+        await new Promise((r) => window.setTimeout(r, NO_FOCUS_SETTLE_MS));
+      } else {
+        setCaptureHint("Capturing sharp frame…");
+      }
+    } catch {
+      setCaptureHint("Hold the camera steady…");
+      await new Promise((r) => window.setTimeout(r, NO_FOCUS_SETTLE_MS));
+    }
+
+    const file = await snapFrame();
     if (file) enterPreview(file);
-    else autoCaptureLockedRef.current = false;
-  }, [snapFrame, enterPreview]);
+    else {
+      autoCaptureLockedRef.current = false;
+      setIsCapturing(false);
+      setCaptureHint(null);
+    }
+  }, [snapFrame, enterPreview, getVideo]);
 
   triggerCaptureRef.current = triggerCapture;
 
@@ -225,13 +293,18 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     }, 450);
   }, [stopAnalysis, getVideo]);
 
-  const handleUserMedia = useCallback(() => {
-    setIsStarting(false);
-    setError(null);
-    streamReadyAtRef.current = Date.now();
-    setStreamReady(true);
-    startAnalysisLoop();
-  }, [startAnalysisLoop]);
+  const handleUserMedia = useCallback(
+    (stream: MediaStream) => {
+      setIsStarting(false);
+      setError(null);
+      streamReadyAtRef.current = Date.now();
+      setStreamReady(true);
+      void applyBestCameraTrackSettings(stream).finally(() => {
+        startAnalysisLoop();
+      });
+    },
+    [startAnalysisLoop],
+  );
 
   const handleUserMediaError = useCallback(
     (err: string | DOMException) => {
@@ -332,7 +405,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const statusCopy = STATUS_COPY[alignmentStatus];
   const alignmentProgress = getAlignmentProgress(sharpness, stableCount, cardScore);
   const cardDetected = cardScore >= CARD_DETECT_MIN_SCORE * 0.65;
-  const canManualCapture = streamReady && !isStarting && !error;
+  const canManualCapture = streamReady && !isStarting && !error && !isCapturing;
 
   const videoConstraints = buildWebcamVideoConstraints(facingMode, constraintTier);
   const cameraLabel = facingMode === "environment" ? "Back camera" : "Front camera";
@@ -367,7 +440,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                 audio={false}
                 mirrored={facingMode === "user"}
                 screenshotFormat="image/jpeg"
-                screenshotQuality={0.92}
+                screenshotQuality={CAPTURE_JPEG_QUALITY}
                 forceScreenshotSourceSize
                 videoConstraints={videoConstraints}
                 onUserMedia={handleUserMedia}
@@ -448,8 +521,14 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                     </Button>
 
                     <div className="min-w-0 flex-1 text-center">
-                      <p className="truncate text-sm font-semibold text-white">{statusCopy.title}</p>
-                      <p className="mt-0.5 truncate text-xs text-white/75">{statusCopy.hint}</p>
+                      <p className="truncate text-sm font-semibold text-white">
+                        {captureHint || statusCopy.title}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-white/75">
+                        {captureHint
+                          ? "Keep the card flat and still for a sharp photo"
+                          : statusCopy.hint}
+                      </p>
                       {isMobileDevice() && streamReady && (
                         <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-wide text-cyan-300/90">
                           {cameraLabel}
@@ -495,7 +574,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                   <div className="flex justify-center">
                     <button
                       type="button"
-                      onClick={triggerCapture}
+                      onClick={() => void triggerCapture()}
                       disabled={!canManualCapture}
                       className={cn(
                         "relative flex h-[76px] w-[76px] items-center justify-center rounded-full transition-all",
@@ -512,7 +591,11 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                           canManualCapture ? "bg-white" : "bg-white/40",
                         )}
                       >
-                        <Camera className={cn("h-7 w-7", canManualCapture ? "text-black" : "text-white/70")} />
+                        {isCapturing ? (
+                          <Loader2 className={cn("h-7 w-7 animate-spin", canManualCapture ? "text-black" : "text-white/70")} />
+                        ) : (
+                          <Camera className={cn("h-7 w-7", canManualCapture ? "text-black" : "text-white/70")} />
+                        )}
                       </span>
                     </button>
                   </div>

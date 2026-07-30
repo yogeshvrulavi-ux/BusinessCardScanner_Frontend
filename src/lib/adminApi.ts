@@ -18,6 +18,8 @@ export type Company = {
   admin_name?: string;
   admin_email?: string;
   admin_username?: string;
+  admin_designation?: string;
+  admin_department?: string;
   user_count?: number;
   address: string;
   phone: string;
@@ -276,6 +278,8 @@ export async function acceptInvitation(data: {
   confirm_password: string;
   phone?: string;
   username?: string;
+  designation?: string;
+  department?: string;
   company_name?: string;
   company_code?: string;
   company_address?: string;

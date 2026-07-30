@@ -1,6 +1,7 @@
 import type { SyncResult } from "@/lib/contactApi";
 import {
   getCurrentAppUser,
+  getCurrentAppUserSync,
   getUserScopeKeys,
   type AppUserIdentity,
 } from "@/lib/currentAppUser";
@@ -231,6 +232,34 @@ export function getOutreachStatusForContactSync(
     emailDelivery: entry.emailDelivery,
     whatsappDelivery: entry.whatsappDelivery,
   };
+}
+
+/**
+ * Overwrite the offline outreach cache with authoritative backend/DB values.
+ * Call after API responses so Contacts never keeps stale local Sent/Pending.
+ */
+export function overwriteOutreachCacheFromBackend(
+  contact: OutreachContactRef,
+  backend: {
+    emailDelivery?: OutreachDeliveryRecord;
+    whatsappDelivery?: OutreachDeliveryRecord;
+  },
+  appUser: AppUserIdentity | null = getCurrentAppUserSync(),
+): void {
+  if (!backend.emailDelivery && !backend.whatsappDelivery) return;
+  const contactKey = outreachContactKey(contact);
+  const entry: OutreachStatusEntry = {
+    email: contact.email || undefined,
+    phone: contact.phone || undefined,
+    name: contact.name || undefined,
+    ...(backend.emailDelivery ? { emailDelivery: backend.emailDelivery } : {}),
+    ...(backend.whatsappDelivery ? { whatsappDelivery: backend.whatsappDelivery } : {}),
+  };
+  for (const scope of getUserScopeKeys(appUser)) {
+    const store = readStore(scope);
+    store[contactKey] = { ...(store[contactKey] || {}), ...entry };
+    writeStore(scope, store);
+  }
 }
 
 export function removeOutreachStatusForContact(

@@ -4,6 +4,10 @@ export type LeadPayload = {
   lastName?: string;
   designation: string;
   company: string;
+  /** Dial code only, e.g. "+91". */
+  countryCode?: string;
+  countryName?: string;
+  /** Local phone digits without country dial code. */
   phone: string;
   secondaryPhone?: string;
   email: string;
@@ -17,6 +21,8 @@ export type LeadPayload = {
   notes?: string;
   /** Event where this card was collected (required on save). */
   eventName?: string;
+  /** Exhibition day label, e.g. "Day 1". */
+  eventDay?: string;
   /** Client-side event id from local event list. */
   eventId?: string;
   /** Scan metadata (Google Sheets reporting only; not stored in PostgreSQL). */
@@ -61,6 +67,8 @@ export function buildContactBody(payload: LeadPayload) {
     lastName: payload.lastName || "",
     designation: payload.designation,
     company: payload.company,
+    countryCode: payload.countryCode || "",
+    countryName: payload.countryName || "",
     phone: payload.phone,
     secondaryPhone: payload.secondaryPhone || "",
     email: payload.email,
@@ -73,6 +81,7 @@ export function buildContactBody(payload: LeadPayload) {
     gstNumber: payload.gstNumber || "",
     notes: payload.notes || "",
     eventName: payload.eventName || "",
+    eventDay: payload.eventDay || "",
     eventId: payload.eventId || "",
     source: "scan",
   };

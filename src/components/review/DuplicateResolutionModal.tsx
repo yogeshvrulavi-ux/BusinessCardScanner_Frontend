@@ -4,7 +4,7 @@ import type { DuplicateMatch } from "@/lib/duplicateDetection";
 import { diffContacts } from "@/lib/duplicateDetection";
 import type { LeadPayload } from "@/lib/cardImage";
 
-export type DuplicateAction = "update" | "merge" | "new" | "discard";
+export type DuplicateAction = "update" | "merge" | "new" | "discard" | "edit";
 
 type DuplicateResolutionModalProps = {
   open: boolean;
@@ -69,7 +69,14 @@ export function DuplicateResolutionModal({
             Merge contact
           </Button>
           <Button className="rounded-md" onClick={() => onResolve("new")}>Save as new</Button>
-          <Button variantType="secondary" className="rounded-md" onClick={() => onResolve("discard")}>
+          <Button variantType="secondary" className="rounded-md" onClick={() => onResolve("edit")}>
+            Edit
+          </Button>
+          <Button
+            variantType="secondary"
+            className="col-span-2 rounded-md"
+            onClick={() => onResolve("discard")}
+          >
             Discard
           </Button>
         </div>

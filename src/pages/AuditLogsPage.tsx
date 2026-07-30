@@ -7,6 +7,7 @@ import { AuthGate } from "@/components/auth/AuthGate";
 import { toast } from "sonner";
 import { API_BASE_URL } from "@/lib/api";
 import { apiFetch } from "@/lib/apiFetch";
+import { formatPersonDisplay } from "@/lib/personDisplay";
 import { TABLE_PAGE_SIZE, TablePagination } from "@/components/ui/table-pagination";
 
 type AuditLog = {
@@ -30,6 +31,17 @@ function usernameOf(log: AuditLog): string {
     if (typeof identifier === "string" && identifier.trim()) return identifier;
   }
   return "";
+}
+
+function actorDisplayName(log: AuditLog): string {
+  return (
+    formatPersonDisplay({
+      fullName: log.actor_name,
+      email: log.actor_email,
+    }) ||
+    log.actor_username ||
+    "System"
+  );
 }
 
 export function AuditLogsPage() {
@@ -111,7 +123,7 @@ function AuditLogsPageInner() {
                     </td>
                     <td className="px-4 py-3 font-bold text-white">{log.action}</td>
                     <td className="px-4 py-3">
-                      <div className="font-medium">{log.actor_name?.trim() || log.actor_username || "System"}</div>
+                      <div className="font-medium">{actorDisplayName(log)}</div>
                       <div className="text-xs text-muted-foreground">
                         {log.actor_email || (log.user_id ? `User ${log.user_id}` : "Automated event")}
                       </div>

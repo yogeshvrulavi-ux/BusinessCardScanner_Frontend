@@ -27,12 +27,23 @@ function normalizePhone(phone: string): string {
   return String(phone || "").replace(/\D/g, "");
 }
 
+function fullPhoneDigits(payload: {
+  phone?: string;
+  countryCode?: string;
+}): string {
+  const local = normalizePhone(payload.phone || "");
+  if (!local) return "";
+  const cc = normalizePhone(payload.countryCode || "");
+  if (cc && !local.startsWith(cc)) return `${cc}${local}`;
+  return local;
+}
+
 function findDuplicatesLocally(
   contacts: StoredContact[],
   payload: LeadPayload,
 ): DuplicateMatch[] {
   const email = String(payload.email || "").trim().toLowerCase();
-  const phone = normalizePhone(payload.phone || "");
+  const phone = fullPhoneDigits(payload);
   const name = String(payload.fullName || "").trim().toLowerCase();
   const company = String(payload.company || "").trim().toLowerCase();
 
@@ -45,12 +56,21 @@ function findDuplicatesLocally(
 
     const matchedBy: DuplicateMatch["matchedBy"] = [];
     const cEmail = String(contact.email || "").trim().toLowerCase();
-    const cPhone = normalizePhone(String(contact.phone || ""));
+    const cPhone = fullPhoneDigits({
+      phone: String(contact.phone || ""),
+      countryCode: String(contact.countryCode || ""),
+    });
     const cName = String(contact.fullName || contact.name || "").trim().toLowerCase();
     const cCompany = String(contact.company || "").trim().toLowerCase();
 
     if (email && cEmail && email === cEmail) matchedBy.push("email");
-    if (phone && cPhone && phone === cPhone) matchedBy.push("phone");
+    if (
+      phone &&
+      cPhone &&
+      (phone === cPhone || phone.endsWith(cPhone) || cPhone.endsWith(phone))
+    ) {
+      matchedBy.push("phone");
+    }
     if (name && company && cName === name && cCompany === company) matchedBy.push("name_company");
 
     if (matchedBy.length > 0) {
@@ -75,6 +95,7 @@ export async function checkForDuplicates(payload: LeadPayload): Promise<Duplicat
           fullName: payload.fullName || "",
           company: payload.company || "",
           phone: payload.phone || "",
+          countryCode: payload.countryCode || "",
           email: payload.email || "",
         }),
       });

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/sidebar";
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const path = useRouterState({ select: (r) => r.location.pathname });
   const { user } = useAuth();
@@ -32,10 +32,14 @@ export function AppSidebar() {
     return path.startsWith(url);
   };
 
+  const handleNavClick = () => {
+    if (isMobile) setOpenMobile(false);
+  };
+
   return (
     <Sidebar collapsible="icon" className="border-b border-border/60">
       <SidebarHeader className="px-3 pt-4">
-        <Link to="/scan" className="flex items-center gap-2.5 px-2 py-1.5">
+        <Link to="/scan" className="flex items-center gap-2.5 px-2 py-1.5" onClick={handleNavClick}>
           <AppLogo size={collapsed ? "sm" : "md"} />
           {!collapsed && (
             <div className="leading-tight">
@@ -62,7 +66,7 @@ export function AppSidebar() {
                       isActive={active}
                       className="h-10 rounded-[0.5rem] data-[active=true]:rounded-[0.5rem] data-[active=true]:bg-accent data-[active=true]:text-accent-foreground data-[active=true]:font-medium"
                     >
-                      <Link to={item.url} className="flex items-center gap-3">
+                      <Link to={item.url} className="flex items-center gap-3" onClick={handleNavClick}>
                         <item.icon className="h-4 w-4" />
                         {!collapsed && (
                           <span className="text-sm font-medium tracking-tight">{item.title}</span>

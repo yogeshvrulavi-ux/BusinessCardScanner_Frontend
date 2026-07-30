@@ -76,9 +76,13 @@ function saveConnectionMode(): "online" | "offline" {
   return getConnectionMode();
 }
 
-function notifyContactsListChanged(): void {
+function notifyContactsListChanged(contactId?: string): void {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
+    window.dispatchEvent(
+      new CustomEvent("cs-contacts-updated", {
+        detail: contactId ? { contactId } : undefined,
+      }),
+    );
     void import("@/lib/contactsDirectory").then((m) => m.invalidateContactsDirectory());
   }
 }
@@ -159,7 +163,7 @@ async function saveOnlineToPostgres(
     const { recordDirectDatabaseCapture } = await import("@/lib/captureSourceAnalytics");
     recordDirectDatabaseCapture();
     await persistOutreachStatus(body, result);
-    notifyContactsListChanged();
+    notifyContactsListChanged(result.id);
     return {
       id: result.id || crypto.randomUUID(),
     };
@@ -199,7 +203,7 @@ export async function syncQueueItem(
       await removeQueueItem(item.id);
       const { recordQueueSyncedToDatabase } = await import("@/lib/captureSourceAnalytics");
       recordQueueSyncedToDatabase();
-      notifyContactsListChanged();
+      notifyContactsListChanged(String(existingId));
       return { id: String(existingId) };
     }
   } catch {
@@ -223,7 +227,7 @@ export async function syncQueueItem(
   await persistOutreachStatus(payload, result);
   const { recordQueueSyncedToDatabase } = await import("@/lib/captureSourceAnalytics");
   recordQueueSyncedToDatabase();
-  notifyContactsListChanged();
+  notifyContactsListChanged(result.id);
   return {
     id: result.id,
     emailSent: result.emailSent,

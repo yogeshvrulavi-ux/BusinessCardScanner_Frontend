@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/layout/StatusPill";
 import type { QueueItem } from "@/lib/indexeddb";
 import type { ContactStatus } from "@/lib/contactStatus";
+import { formatPersonDisplay } from "@/lib/personDisplay";
 import { cn } from "@/lib/utils";
 
 function queueItemName(item: QueueItem): string {
@@ -26,7 +27,10 @@ function formatQueuedAt(iso: string | undefined): string {
 /** Who queued this card — from registry attribution fields. */
 function capturedByLabel(item: QueueItem): string {
   const d = item.contact_data ?? {};
-  const name = String(d.capturedByName || "").trim();
+  const name = formatPersonDisplay({
+    fullName: String(d.capturedByName || ""),
+    email: String(d.capturedByEmail || ""),
+  });
   const username = String(d.capturedByUsername || "").trim();
   if (name && username) return `${name} (@${username})`;
   if (name) return name;

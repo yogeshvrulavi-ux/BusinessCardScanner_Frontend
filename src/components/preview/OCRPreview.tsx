@@ -46,11 +46,18 @@ const initialsOf = (name: string) =>
 export const OCRPreview = ({ values }: { values: Record<string, string> }) => {
   const fullName = (values.fullName ?? "").trim();
   const companyName = (values.companyName ?? "").trim();
+  const countryLabel = (values.countryPreview ?? "").trim();
 
   const rows = PREVIEW_ROWS.map((row) => ({
     ...row,
     value: (values[row.name] ?? "").trim(),
   })).filter((row) => row.value);
+
+  // Prefer showing country + local phone together in the preview when available.
+  const phoneRow = rows.find((row) => row.name === "phoneNumber");
+  if (phoneRow && countryLabel) {
+    phoneRow.value = `${countryLabel} ${phoneRow.value}`.trim();
+  }
 
   if (!fullName && rows.length === 0)
     return (
