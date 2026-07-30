@@ -136,10 +136,11 @@ export function GoogleDriveConnectCard() {
           <div className="rounded-xl border border-border/60 bg-muted/30 p-4 text-sm">
             {status?.oauth_configured === false ? (
               <p className="text-muted-foreground">
-                Google OAuth is not configured on the server yet. Ask an engineer to set{" "}
+                Google OAuth is not configured on the server yet. Place{" "}
+                <code className="text-[11px]">secrets/client_secret_*.json</code> or set{" "}
                 <code className="text-[11px]">GOOGLE_OAUTH_CLIENT_ID</code> /{" "}
                 <code className="text-[11px]">SECRET</code> /{" "}
-                <code className="text-[11px]">REDIRECT_URI</code>.
+                <code className="text-[11px]">REDIRECT_URI</code>, then restart the backend.
               </p>
             ) : connected ? (
               <>

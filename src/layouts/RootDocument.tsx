@@ -8,7 +8,8 @@ const PWA_INSTALL_BOOTSTRAP = `(function(){try{window.__ncsDeferredInstallPrompt
 
 export function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // Theme bootstrap script may set style.colorScheme / .dark before hydrate.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
         <script
@@ -18,7 +19,7 @@ export function RootDocument({ children }: { children: React.ReactNode }) {
         />
         <script dangerouslySetInnerHTML={{ __html: PWA_INSTALL_BOOTSTRAP }} />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         {children}
         <Scripts />
       </body>
