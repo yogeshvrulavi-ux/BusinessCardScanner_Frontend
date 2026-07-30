@@ -29,7 +29,7 @@ import {
   invalidateContactsDirectory,
   type DirectoryContact,
 } from "@/lib/contactsDirectory";
-import { fetchContactsPage } from "@/lib/contactsPageApi";
+import { fetchContactById, fetchContactsPage } from "@/lib/contactsPageApi";
 import { getQueueItems } from "@/lib/indexeddb";
 import { loadEvents, resolveEventNameForContact } from "@/lib/eventStorage";
 import { contactBelongsToAppUser, getCurrentAppUser, getCurrentAppUserSync } from "@/lib/currentAppUser";
@@ -240,7 +240,35 @@ export function ContactsPage() {
 
   useEffect(() => {
     void loadPage();
-    const onDataChanged = () => {
+    const onDataChanged = (event: Event) => {
+      const contactId = (event as CustomEvent<{ contactId?: string }>).detail?.contactId;
+      if (contactId) {
+        void (async () => {
+          try {
+            const updated = await fetchContactById(contactId);
+            if (!updated) {
+              void loadPage({ silent: true });
+              return;
+            }
+            setDbContacts((prev) => {
+              const idx = prev.findIndex((c) => c.id === contactId);
+              if (idx === -1) {
+                // New contact not on this page yet — reload page 1 quietly.
+                void loadPage({ silent: true, pageOverride: 1 });
+                return prev;
+              }
+              const next = [...prev];
+              next[idx] = { ...next[idx], ...updated, accent: next[idx].accent };
+              return next;
+            });
+            setQueueContacts((prev) => prev.filter((c) => c.id !== contactId));
+          } catch (err) {
+            console.error(err);
+            void loadPage({ silent: true });
+          }
+        })();
+        return;
+      }
       void loadPage({ silent: true });
     };
     window.addEventListener("cs-contacts-updated", onDataChanged);
@@ -282,7 +310,7 @@ export function ContactsPage() {
         skipEmail: !userSettings.emailNotificationsEnabled,
       });
       toast.success(`Synced: ${item.contact_data.name || "contact"}`);
-      window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
+      // syncQueueItem already emits cs-contacts-updated with the new contact id
       window.dispatchEvent(new CustomEvent("cs-queue-updated"));
     } catch (err: any) {
       toast.error(err.message || "Failed to sync contact.");

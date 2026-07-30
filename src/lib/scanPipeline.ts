@@ -1,6 +1,6 @@
 import { emptyScanContact, type ScanContact } from "@/lib/scanResult";
 import { runBrowserOcr } from "@/lib/browserOcr";
-import { storeScanSession } from "@/lib/scanSession";
+import { compressDataUrlForStorage, storeScanSession } from "@/lib/scanSession";
 import { getConnectionMode, isOfflineMode } from "@/lib/connectionMode";
 import { enhanceOfflineCameraCapture } from "@/lib/offlineCameraPreprocess";
 import { apiFetch } from "@/lib/apiFetch";
@@ -148,7 +148,12 @@ export async function scanFileAndStore(
   captureSource?: string,
 ): Promise<ScanExtractionResult> {
   const result = await extractContactFromImage(file, onProgress, captureSource);
-  storeScanSession(result.contact, imageDataUrl, {
+  // OCR uses the full-quality capture; compress only afterward for session/storage size.
+  const storedImage =
+    captureSource === "Camera" && imageDataUrl
+      ? await compressDataUrlForStorage(imageDataUrl)
+      : imageDataUrl;
+  storeScanSession(result.contact, storedImage, {
     rawText: result.rawText,
     ocrWarning: result.ocrWarning,
     ocrEngine: result.ocrEngine,

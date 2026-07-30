@@ -620,7 +620,9 @@ export const ReviewPage = () => {
   };
 
   const executeSave = async (action: DuplicateAction = "new") => {
-    if (action === "discard") {
+    // Edit / Discard: close the dialog and keep the current Review form (OCR data intact)
+    // so the user can change fields and save again with the same duplicate validation.
+    if (action === "discard" || action === "edit") {
       setShowDuplicateModal(false);
       setDuplicateMatch(null);
       return;

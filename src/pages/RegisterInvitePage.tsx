@@ -135,7 +135,8 @@ export function RegisterInvitePage() {
         department: department.trim(),
       });
 
-      // Seed Settings/Profile local preferences so post-login Settings stays consistent
+      // Seed Settings/Profile local preferences so post-login Settings stays consistent.
+      // New accounts start with WhatsApp + Email notifications enabled (user can disable later).
       const current = loadUserSettings();
       saveUserSettings({
         ...current,
@@ -144,6 +145,8 @@ export function RegisterInvitePage() {
         phone: result.user.phone || phone.trim(),
         company: result.user.company_name || info.company_name || current.company,
         role: designation.trim() || roleLabel || current.role,
+        emailNotificationsEnabled: true,
+        whatsappNotificationsEnabled: true,
       });
 
       toast.success("Account created. Please sign in.");

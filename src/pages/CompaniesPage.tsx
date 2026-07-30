@@ -63,7 +63,7 @@ function CompaniesPageInner() {
         setTotal(res.total);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load admins.");
+      toast.error(err instanceof Error ? err.message : "Failed to load employees.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -95,18 +95,6 @@ function CompaniesPageInner() {
     }
   };
 
-  const formatDate = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    } catch {
-      return iso;
-    }
-  };
-
   const statusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case "active":
@@ -130,10 +118,10 @@ function CompaniesPageInner() {
       />
 
       <PageShell
-        title="Admin Management"
+        title="Employee Management"
         description={
           total > 0
-            ? `${total} admin${total === 1 ? "" : "s"}`
+            ? `${total} employee${total === 1 ? "" : "s"}`
             : "Invite and manage company Admins"
         }
         actions={
@@ -161,14 +149,14 @@ function CompaniesPageInner() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="mt-3 text-sm text-muted-foreground">Loading admins…</p>
+              <p className="mt-3 text-sm text-muted-foreground">Loading employees…</p>
             </div>
           ) : companies.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent">
                 <UserIcon className="h-7 w-7 text-muted-foreground" />
               </div>
-              <h3 className="mt-4 font-display text-lg font-semibold">No admins yet</h3>
+              <h3 className="mt-4 font-display text-lg font-semibold">No employees yet</h3>
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">
                 Invite a company Admin by email. They set their own password when they register.
               </p>
@@ -182,17 +170,15 @@ function CompaniesPageInner() {
             </div>
           ) : (
             <>
-              {/* Desktop table — Admin is the primary identity; company is secondary. */}
+              {/* Desktop table — Name, Email, Department/Designation, Status, Actions */}
               <div className="hidden overflow-x-auto rounded-xl border border-border/60 lg:block">
                 <table className="w-full text-sm">
                   <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
                     <tr>
-                      <th className="px-4 py-3 font-bold text-white">Admin</th>
-                      <th className="px-4 py-3 font-bold text-white">Designation</th>
-                      <th className="px-4 py-3 font-bold text-white">Users</th>
-                      <th className="px-4 py-3 font-bold text-white">Code</th>
+                      <th className="px-4 py-3 font-bold text-white">Name</th>
+                      <th className="px-4 py-3 font-bold text-white">Email</th>
+                      <th className="px-4 py-3 font-bold text-white">Department / Designation</th>
                       <th className="px-4 py-3 font-bold text-white">Status</th>
-                      <th className="px-4 py-3 font-bold text-white">Created</th>
                       <th className="px-4 py-3 font-bold text-white text-right">Actions</th>
                     </tr>
                   </thead>
@@ -200,6 +186,8 @@ function CompaniesPageInner() {
                     {companies.map((c) => {
                       const label = adminLabel(c);
                       const hasAdmin = Boolean(c.admin_name || c.admin_email);
+                      const designation = c.admin_designation?.trim() || "Admin";
+                      const department = c.admin_department?.trim() || "";
                       return (
                         <tr key={c.id} className="transition hover:bg-muted/30">
                           <td className="px-4 py-3">
@@ -214,39 +202,27 @@ function CompaniesPageInner() {
                                 <div className="font-medium">
                                   {hasAdmin ? label : "No admin yet"}
                                 </div>
-                                {hasAdmin && c.admin_email && label !== c.admin_email ? (
-                                  <div className="text-[11px] text-muted-foreground">
-                                    {c.admin_email}
-                                  </div>
-                                ) : null}
+                                <div className="text-[11px] text-muted-foreground">
+                                  {c.user_count ?? 0} user{(c.user_count ?? 0) === 1 ? "" : "s"}
+                                  {" · "}
+                                  <code className="rounded bg-muted px-1 py-0.5 font-mono">{c.company_code}</code>
+                                </div>
                               </div>
                             </div>
                           </td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">
+                            {c.admin_email?.trim() || "—"}
+                          </td>
                           <td className="px-4 py-3">
-                            <div className="text-sm text-muted-foreground">
-                              {c.admin_designation?.trim() || "Admin"}
-                            </div>
-                            {c.admin_department?.trim() ? (
-                              <div className="text-[11px] text-muted-foreground/80">
-                                {c.admin_department.trim()}
-                              </div>
+                            <div className="text-sm text-muted-foreground">{designation}</div>
+                            {department ? (
+                              <div className="text-[11px] text-muted-foreground/80">{department}</div>
                             ) : null}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
-                              {c.user_count ?? 0}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{c.company_code}</code>
                           </td>
                           <td className="px-4 py-3">
                             <Badge className={`rounded-full border text-[10px] font-medium ${statusColor(c.status)}`}>
                               {c.status ?? "active"}
                             </Badge>
-                          </td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">
-                            {formatDate(c.created_at)}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <Button
@@ -292,19 +268,18 @@ function CompaniesPageInner() {
                             </Badge>
                           </div>
                           <div className="mt-0.5 text-xs text-muted-foreground">
+                            {c.admin_email?.trim() || "—"}
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
                             {c.admin_designation?.trim() || "Admin"}
                             {c.admin_department?.trim()
                               ? ` · ${c.admin_department.trim()}`
                               : ""}
-                            {" · "}
-                            <code className="rounded bg-muted px-1 py-0.5 text-[10px] font-mono">{c.company_code}</code>
                           </div>
                           <div className="mt-1 text-[11px] text-muted-foreground">
-                            {hasAdmin && c.admin_email && label !== c.admin_email
-                              ? `${c.admin_email} · `
-                              : ""}
                             {c.user_count ?? 0} user{(c.user_count ?? 0) === 1 ? "" : "s"}
-                            {" · "}Created {formatDate(c.created_at)}
+                            {" · "}
+                            <code className="rounded bg-muted px-1 py-0.5 text-[10px] font-mono">{c.company_code}</code>
                           </div>
                         </div>
                       </div>

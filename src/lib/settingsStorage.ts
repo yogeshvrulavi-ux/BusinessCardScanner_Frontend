@@ -31,7 +31,7 @@ const OUTREACH_DEFAULTS_OFF_MIGRATION_KEY = "cs-outreach-defaults-off-v1";
 const PROFILE_PLACEHOLDERS_MIGRATION_KEY = "cs-profile-placeholders-cleared-v1";
 /** Old defaults that were silently saved as if the user had typed them. */
 const LEGACY_ROLE_PLACEHOLDERS = new Set(["Workspace owner"]);
-const LEGACY_COMPANY_PLACEHOLDERS = new Set(["NameCardScan", "CardSync AI"]);
+const LEGACY_COMPANY_PLACEHOLDERS = new Set(["NameCardScan", "c"]);
 
 export const TIMEZONE_OPTIONS = [
   "Pacific Time (US)",
@@ -55,8 +55,8 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   notificationsEnabled: true,
   queueNotificationsEnabled: true,
   captureNotificationsEnabled: true,
-  emailNotificationsEnabled: false,
-  whatsappNotificationsEnabled: false,
+  emailNotificationsEnabled: true,
+  whatsappNotificationsEnabled: true,
   cookiesAccepted: false,
   analyticsCookiesEnabled: false,
   autoSyncQueueWhenOnline: true,

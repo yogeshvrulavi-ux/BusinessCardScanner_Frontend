@@ -18,7 +18,6 @@ import { recordLastSyncTime } from "@/lib/syncStatus";
 import { loadUserSettings } from "@/lib/settingsStorage";
 import { useForceLightMode } from "@/hooks/useForceLightMode";
 import { publishOfflineQueueSnapshot } from "@/lib/offlineQueueRegistry";
-import { registerNameCardScanPwa } from "@/lib/pwa";
 
 export function AppShell() {
   const { queryClient } = useRouteContext({ from: "__root__" });
@@ -42,8 +41,6 @@ export function AppShell() {
     routesToPreload.forEach((path) => {
       void router.preloadRoute({ to: path }).catch(() => undefined);
     });
-
-    registerNameCardScanPwa();
 
     const processAutoSync = async () => {
       if (!navigator.onLine) return;

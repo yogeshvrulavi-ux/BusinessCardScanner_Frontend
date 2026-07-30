@@ -1,4 +1,5 @@
-import { UserCircle2, Settings, LogOut, Shield } from "lucide-react";
+import { UserCircle2, Settings, LogOut, Shield, Download } from "lucide-react";
+import { toast } from "sonner";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { HeaderSearch } from "@/components/layout/HeaderSearch";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -27,11 +28,19 @@ import {
   type ConnectionMode,
 } from "@/lib/connectionMode";
 import { ConnectivityStatus } from "@/components/pwa/ConnectivityStatus";
+import {
+  INSTALL_EVENT,
+  INSTALL_GONE_EVENT,
+  canPromptInstall,
+  isStandaloneDisplay,
+  promptInstallNameCardScan,
+} from "@/lib/pwa";
 
 export function TopBar() {
   const [connectionMode, setConnectionModeState] = useState<ConnectionMode>("online");
   const [pendingCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
   const { fullName: profileName, initials: profileInitials } = useUserSettings();
   const { user, logout } = useAuth();
   const isMobile = useIsMobile();
@@ -101,6 +110,7 @@ export function TopBar() {
     if (typeof window === "undefined") return;
 
     updatePendingCount();
+    setCanInstall(canPromptInstall());
 
     syncConnectionModeWithNetwork();
     refreshConnectionMode();
@@ -122,6 +132,8 @@ export function TopBar() {
     const handleModeChanged = () => refreshConnectionMode();
     const handleSyncStart = () => setIsSyncing(true);
     const handleSyncEnd = () => setIsSyncing(false);
+    const refreshInstall = () => setCanInstall(canPromptInstall());
+    const handleInstalled = () => setCanInstall(false);
 
     window.addEventListener("online", handleNetworkOnline);
     window.addEventListener("offline", handleNetworkOffline);
@@ -129,16 +141,40 @@ export function TopBar() {
     window.addEventListener("cs-queue-updated", updatePendingCount);
     window.addEventListener("cs-sync-start", handleSyncStart);
     window.addEventListener("cs-sync-end", handleSyncEnd);
+    window.addEventListener(INSTALL_EVENT, refreshInstall);
+    window.addEventListener(INSTALL_GONE_EVENT, refreshInstall);
+    window.addEventListener("appinstalled", handleInstalled);
+
+    // Re-check shortly after mount in case the early bootstrap stored a prompt
+    // before this listener was attached.
+    const timer = window.setTimeout(refreshInstall, 0);
 
     return () => {
+      window.clearTimeout(timer);
       window.removeEventListener("online", handleNetworkOnline);
       window.removeEventListener("offline", handleNetworkOffline);
       window.removeEventListener(CONNECTION_MODE_CHANGED, handleModeChanged);
       window.removeEventListener("cs-queue-updated", updatePendingCount);
       window.removeEventListener("cs-sync-start", handleSyncStart);
       window.removeEventListener("cs-sync-end", handleSyncEnd);
+      window.removeEventListener(INSTALL_EVENT, refreshInstall);
+      window.removeEventListener(INSTALL_GONE_EVENT, refreshInstall);
+      window.removeEventListener("appinstalled", handleInstalled);
     };
   }, [refreshConnectionMode]);
+
+  const handleInstallApp = () => {
+    if (isStandaloneDisplay()) {
+      setCanInstall(false);
+      return;
+    }
+    void promptInstallNameCardScan().then((outcome) => {
+      setCanInstall(canPromptInstall());
+      if (outcome === "unavailable") {
+        toast.message("Install is not available in this browser right now.");
+      }
+    });
+  };
 
   const headerSearch = (className: string, placeholder?: string) => (
     <HeaderSearch
@@ -216,6 +252,12 @@ export function TopBar() {
               </div>
             )}
             <DropdownMenuSeparator />
+            {canInstall ? (
+              <DropdownMenuItem onClick={handleInstallApp}>
+                <Download className="mr-2 h-4 w-4" />
+                Install App
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
               <Settings className="mr-2 h-4 w-4" />
               Preferences

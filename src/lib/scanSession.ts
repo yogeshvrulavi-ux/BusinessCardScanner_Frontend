@@ -76,6 +76,52 @@ export async function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+/**
+ * Compress a capture for session/DB storage AFTER OCR.
+ * Keeps aspect ratio; does not upscale. Quality is tuned for storage size, not OCR.
+ */
+export async function compressDataUrlForStorage(
+  dataUrl: string,
+  maxEdge = 1600,
+  quality = 0.82,
+): Promise<string> {
+  if (!dataUrl || !dataUrl.startsWith("data:")) return dataUrl;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      if (!w || !h) {
+        resolve(dataUrl);
+        return;
+      }
+
+      const scale = Math.min(1, maxEdge / Math.max(w, h));
+      const tw = Math.max(1, Math.round(w * scale));
+      const th = Math.max(1, Math.round(h * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = tw;
+      canvas.height = th;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(dataUrl);
+        return;
+      }
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, tw, th);
+      try {
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 export async function dataUrlToFile(dataUrl: string, fileName = "scan.jpg"): Promise<File> {
   const response = await fetch(dataUrl);
   const blob = await response.blob();

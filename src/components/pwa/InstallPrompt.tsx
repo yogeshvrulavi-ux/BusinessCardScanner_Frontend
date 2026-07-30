@@ -3,30 +3,40 @@ import { Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   INSTALL_EVENT,
-  dismissInstallPrompt,
-  getDeferredInstallPrompt,
+  INSTALL_GONE_EVENT,
+  canPromptInstall,
+  dismissInstallBanner,
   isStandaloneDisplay,
   promptInstallNameCardScan,
-  wasInstallPromptDismissed,
+  wasInstallBannerDismissed,
 } from "@/lib/pwa";
 
 /**
  * Lightweight install banner — shown when the browser fires beforeinstallprompt.
- * Does not change existing layout/styling tokens beyond a slim top strip.
+ * Dismiss is session-only; Install App remains available from the profile menu.
  */
 export function InstallPrompt() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isStandaloneDisplay() || wasInstallPromptDismissed()) return;
+    if (isStandaloneDisplay() || wasInstallBannerDismissed()) return;
 
     const show = () => {
-      if (getDeferredInstallPrompt()) setVisible(true);
+      if (canPromptInstall() && !wasInstallBannerDismissed()) setVisible(true);
     };
+    const hide = () => setVisible(false);
     window.addEventListener(INSTALL_EVENT, show);
+    window.addEventListener(INSTALL_GONE_EVENT, hide);
+    window.addEventListener("appinstalled", hide);
     show();
-    return () => window.removeEventListener(INSTALL_EVENT, show);
+    const timer = window.setTimeout(show, 0);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(INSTALL_EVENT, show);
+      window.removeEventListener(INSTALL_GONE_EVENT, hide);
+      window.removeEventListener("appinstalled", hide);
+    };
   }, []);
 
   if (!visible || isStandaloneDisplay()) return null;
@@ -66,7 +76,7 @@ export function InstallPrompt() {
         aria-label="Dismiss install prompt"
         className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
         onClick={() => {
-          dismissInstallPrompt();
+          dismissInstallBanner();
           setVisible(false);
         }}
       >

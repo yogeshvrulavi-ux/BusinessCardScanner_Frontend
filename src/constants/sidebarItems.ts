@@ -1,5 +1,4 @@
 import {
-  Building2,
   Users,
   Contact,
   ScanLine,
@@ -22,8 +21,8 @@ export type SidebarItem = {
  * Role-based sidebar. Items are filtered by authenticated user role.
  * Unauthorized routes are still blocked by AuthGate + backend RBAC.
  *
- * Invitation actions live under Admin Management / User Management —
- * there is no separate Invitation Management entry.
+ * Super Admin: Employee Management (invite/manage Admins).
+ * Admin: User Management (invite/manage Users).
  */
 export const sidebarItems: SidebarItem[] = [
   {
@@ -33,16 +32,16 @@ export const sidebarItems: SidebarItem[] = [
     roles: ["SUPER_ADMIN", "ADMIN", "USER"],
   },
   {
-    title: "Admin Management",
+    title: "Employee Management",
     url: "/companies",
-    icon: Building2,
+    icon: Users,
     roles: ["SUPER_ADMIN"],
   },
   {
     title: "User Management",
     url: "/users",
     icon: Users,
-    roles: ["SUPER_ADMIN", "ADMIN"],
+    roles: ["ADMIN"],
   },
   {
     title: "Contacts",

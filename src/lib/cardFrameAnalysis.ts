@@ -325,23 +325,146 @@ export function pickDefaultFacingMode(): "environment" | "user" {
   return isMobileDevice() ? "environment" : "user";
 }
 
-/** MediaTrackConstraints for react-webcam — tier 2 = strictest (best for iPhone rear cam). */
+/** Ideal capture resolution — browsers pick the closest supported mode. */
+const IDEAL_CAPTURE_WIDTH = 4032;
+const IDEAL_CAPTURE_HEIGHT = 3024;
+
+/**
+ * MediaTrackConstraints for react-webcam.
+ * Requests rear camera + highest practical resolution; advanced focus/exposure
+ * are applied after the stream opens via applyBestCameraTrackSettings().
+ */
 export function buildWebcamVideoConstraints(
   facingMode: "environment" | "user",
   tier: 0 | 1 | 2,
 ): MediaTrackConstraints | boolean {
   if (tier === 0) {
-    return isMobileDevice() ? { facingMode: { ideal: facingMode } } : true;
+    if (!isMobileDevice()) {
+      return {
+        width: { ideal: IDEAL_CAPTURE_WIDTH },
+        height: { ideal: IDEAL_CAPTURE_HEIGHT },
+      };
+    }
+    return {
+      facingMode: { ideal: facingMode },
+      width: { ideal: IDEAL_CAPTURE_WIDTH },
+      height: { ideal: IDEAL_CAPTURE_HEIGHT },
+    };
   }
-  if (tier === 1) {
-    return { facingMode: { ideal: facingMode } };
-  }
-  // tier 2 — exact facingMode; iOS Safari often ignores "ideal" and opens the selfie cam
-  return { facingMode: { exact: facingMode } };
+
+  const facing =
+    tier === 2 ? ({ exact: facingMode } as const) : ({ ideal: facingMode } as const);
+
+  return {
+    facingMode: facing,
+    width: { ideal: IDEAL_CAPTURE_WIDTH },
+    height: { ideal: IDEAL_CAPTURE_HEIGHT },
+  };
 }
 
 export function initialWebcamConstraintTier(): 0 | 1 | 2 {
   return isMobileDevice() ? 2 : 0;
+}
+
+type TrackCapabilitiesLike = {
+  width?: { min?: number; max?: number };
+  height?: { min?: number; max?: number };
+  focusMode?: string[];
+  exposureMode?: string[];
+  whiteBalanceMode?: string[];
+};
+
+/**
+ * After getUserMedia, push the track to max resolution and enable continuous
+ * autofocus / exposure / white-balance when the device reports support.
+ */
+export async function applyBestCameraTrackSettings(
+  stream: MediaStream,
+): Promise<void> {
+  const track = stream.getVideoTracks()[0];
+  if (!track || typeof track.getCapabilities !== "function") return;
+
+  const caps = track.getCapabilities() as TrackCapabilitiesLike;
+  const constraints: MediaTrackConstraints = {};
+
+  if (caps.width?.max) {
+    constraints.width = { ideal: caps.width.max };
+  } else {
+    constraints.width = { ideal: IDEAL_CAPTURE_WIDTH };
+  }
+  if (caps.height?.max) {
+    constraints.height = { ideal: caps.height.max };
+  } else {
+    constraints.height = { ideal: IDEAL_CAPTURE_HEIGHT };
+  }
+
+  const advanced: Record<string, string> = {};
+  if (caps.focusMode?.includes("continuous")) {
+    advanced.focusMode = "continuous";
+  } else if (caps.focusMode?.includes("single-shot")) {
+    advanced.focusMode = "single-shot";
+  }
+  if (caps.exposureMode?.includes("continuous")) {
+    advanced.exposureMode = "continuous";
+  }
+  if (caps.whiteBalanceMode?.includes("continuous")) {
+    advanced.whiteBalanceMode = "continuous";
+  }
+
+  try {
+    await track.applyConstraints({
+      ...constraints,
+      ...(Object.keys(advanced).length > 0
+        ? ({ advanced: [advanced] } as MediaTrackConstraints)
+        : {}),
+    });
+  } catch {
+    try {
+      await track.applyConstraints(constraints);
+    } catch {
+      /* keep stream as opened */
+    }
+  }
+}
+
+/** Returns true when a focus cycle was requested successfully. */
+export async function triggerCameraAutofocus(
+  stream: MediaStream | null | undefined,
+): Promise<boolean> {
+  const track = stream?.getVideoTracks()?.[0];
+  if (!track || typeof track.getCapabilities !== "function") return false;
+
+  const caps = track.getCapabilities() as TrackCapabilitiesLike;
+  const modes = caps.focusMode || [];
+  if (modes.length === 0) return false;
+
+  try {
+    if (modes.includes("single-shot")) {
+      await track.applyConstraints({
+        advanced: [{ focusMode: "single-shot" }],
+      } as MediaTrackConstraints);
+      await new Promise((r) => window.setTimeout(r, 350));
+      if (modes.includes("continuous")) {
+        await track.applyConstraints({
+          advanced: [{ focusMode: "continuous" }],
+        } as MediaTrackConstraints).catch(() => undefined);
+      }
+      return true;
+    }
+
+    if (modes.includes("continuous")) {
+      // Nudge continuous AF by re-applying; give the lens a short settle window.
+      await track.applyConstraints({
+        advanced: [{ focusMode: "continuous" }],
+      } as MediaTrackConstraints);
+      await new Promise((r) => window.setTimeout(r, 300));
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
 }
 
 async function enumerateVideoInputs(): Promise<MediaDeviceInfo[]> {
@@ -369,11 +492,32 @@ export async function requestCameraStream(
   const attempts: MediaStreamConstraints[] = [];
 
   if (mobile) {
-    // Mobile: rear camera first — { video: true } often opens the selfie cam
-    attempts.push({ video: { facingMode: facing }, audio: false });
-    attempts.push({ video: { facingMode: { ideal: facing } }, audio: false });
+    // Mobile: rear camera first at high resolution — { video: true } often opens the selfie cam
+    attempts.push({
+      video: {
+        facingMode: facing,
+        width: { ideal: IDEAL_CAPTURE_WIDTH },
+        height: { ideal: IDEAL_CAPTURE_HEIGHT },
+      },
+      audio: false,
+    });
+    attempts.push({
+      video: {
+        facingMode: { ideal: facing },
+        width: { ideal: IDEAL_CAPTURE_WIDTH },
+        height: { ideal: IDEAL_CAPTURE_HEIGHT },
+      },
+      audio: false,
+    });
   } else {
     // Desktop: unconstrained first — works on most Windows laptops
+    attempts.push({
+      video: {
+        width: { ideal: IDEAL_CAPTURE_WIDTH },
+        height: { ideal: IDEAL_CAPTURE_HEIGHT },
+      },
+      audio: false,
+    });
     attempts.push({ video: true, audio: false });
   }
 
@@ -404,6 +548,7 @@ export async function requestCameraStream(
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log("Camera stream acquired with constraints:", constraints);
+      await applyBestCameraTrackSettings(stream);
       return stream;
     } catch (err) {
       lastError = err;

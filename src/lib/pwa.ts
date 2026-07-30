@@ -1,6 +1,10 @@
 /**
  * Progressive Web App helpers — service worker registration + install prompt.
- * Works without vite-plugin-pwa so TanStack Start / Amplify deploys stay simple.
+ *
+ * Root cause of “install only once”: `beforeinstallprompt` often fires before React
+ * mounts. Listening only from AppShell (and skipping auth routes) misses the event
+ * for the whole document lifetime. Capture must start as early as possible and the
+ * deferred event must be kept until prompt() is used or the app is installed.
  */
 
 export type BeforeInstallPromptEvent = Event & {
@@ -9,29 +13,86 @@ export type BeforeInstallPromptEvent = Event & {
 };
 
 const INSTALL_EVENT = "cs-pwa-install-available";
-const INSTALL_DISMISSED_KEY = "cs-pwa-install-dismissed";
+const INSTALL_GONE_EVENT = "cs-pwa-install-gone";
+/** Session-only: hides the top banner. Does not clear the deferred install prompt. */
+const BANNER_DISMISSED_SESSION_KEY = "cs-pwa-install-banner-dismissed";
+const EARLY_PROMPT_KEY = "__ncsDeferredInstallPrompt";
+
+type EarlyPromptWindow = Window & {
+  [EARLY_PROMPT_KEY]?: BeforeInstallPromptEvent | null;
+};
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
+let listenersAttached = false;
+let serviceWorkerWired = false;
+
+function getEarlyWindow(): EarlyPromptWindow | null {
+  if (typeof window === "undefined") return null;
+  return window as EarlyPromptWindow;
+}
+
+function notifyInstallAvailable(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(INSTALL_EVENT));
+}
+
+function notifyInstallGone(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(INSTALL_GONE_EVENT));
+}
+
+function storeDeferredPrompt(event: BeforeInstallPromptEvent): void {
+  // Keep the same event instance until prompt() or appinstalled.
+  deferredPrompt = event;
+  const win = getEarlyWindow();
+  if (win) win[EARLY_PROMPT_KEY] = event;
+  notifyInstallAvailable();
+}
+
+function clearDeferredPrompt(): void {
+  deferredPrompt = null;
+  const win = getEarlyWindow();
+  if (win) win[EARLY_PROMPT_KEY] = null;
+  notifyInstallGone();
+}
+
+/** Pull any event captured by the head bootstrap script before this module ran. */
+function adoptEarlyDeferredPrompt(): void {
+  const win = getEarlyWindow();
+  if (!win) return;
+  const early = win[EARLY_PROMPT_KEY];
+  if (early) {
+    deferredPrompt = early;
+  }
+}
 
 export function getDeferredInstallPrompt(): BeforeInstallPromptEvent | null {
+  if (deferredPrompt) return deferredPrompt;
+  adoptEarlyDeferredPrompt();
   return deferredPrompt;
 }
 
 export function clearDeferredInstallPrompt(): void {
-  deferredPrompt = null;
+  clearDeferredPrompt();
 }
 
-export function wasInstallPromptDismissed(): boolean {
+/** True when a deferred install prompt is available and the app is not already installed. */
+export function canPromptInstall(): boolean {
+  if (isStandaloneDisplay()) return false;
+  return Boolean(getDeferredInstallPrompt());
+}
+
+export function wasInstallBannerDismissed(): boolean {
   try {
-    return localStorage.getItem(INSTALL_DISMISSED_KEY) === "1";
+    return sessionStorage.getItem(BANNER_DISMISSED_SESSION_KEY) === "1";
   } catch {
     return false;
   }
 }
 
-export function dismissInstallPrompt(): void {
+export function dismissInstallBanner(): void {
   try {
-    localStorage.setItem(INSTALL_DISMISSED_KEY, "1");
+    sessionStorage.setItem(BANNER_DISMISSED_SESSION_KEY, "1");
   } catch {
     /* ignore */
   }
@@ -46,24 +107,38 @@ export function isStandaloneDisplay(): boolean {
   return mq || iosStandalone;
 }
 
-/** Register SW in production and listen for the browser install prompt. */
+/**
+ * Idempotent PWA bootstrap: early install-prompt capture + production SW registration.
+ * Safe to call from RootLayout and AppShell.
+ */
 export function registerNameCardScanPwa(): void {
   if (typeof window === "undefined") return;
 
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    deferredPrompt = event as BeforeInstallPromptEvent;
-    window.dispatchEvent(new CustomEvent(INSTALL_EVENT));
-  });
+  adoptEarlyDeferredPrompt();
 
-  window.addEventListener("appinstalled", () => {
-    deferredPrompt = null;
-    dismissInstallPrompt();
-  });
+  if (!listenersAttached) {
+    listenersAttached = true;
 
-  if (!("serviceWorker" in navigator)) return;
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      storeDeferredPrompt(event as BeforeInstallPromptEvent);
+    });
+
+    window.addEventListener("appinstalled", () => {
+      clearDeferredPrompt();
+    });
+  }
+
+  // If the head script already captured a prompt, surface it to React listeners.
+  if (deferredPrompt && !isStandaloneDisplay()) {
+    notifyInstallAvailable();
+  }
+
+  if (!("serviceWorker" in navigator) || serviceWorkerWired) return;
+  serviceWorkerWired = true;
 
   if (import.meta.env.DEV) {
+    // Dev: avoid stale SW/cache fighting Vite HMR. Installability is verified on prod builds.
     void navigator.serviceWorker
       .getRegistrations()
       .then((regs) => Promise.all(regs.map((reg) => reg.unregister())))
@@ -76,7 +151,6 @@ export function registerNameCardScanPwa(): void {
   void navigator.serviceWorker
     .register("/sw.js")
     .then((registration) => {
-      // Auto-update: when a new SW is waiting, activate it immediately.
       if (registration.waiting) {
         registration.waiting.postMessage({ type: "SKIP_WAITING" });
       }
@@ -92,7 +166,6 @@ export function registerNameCardScanPwa(): void {
     })
     .catch(() => undefined);
 
-  // Reload once when the controller changes after an update.
   let refreshing = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (refreshing) return;
@@ -101,18 +174,22 @@ export function registerNameCardScanPwa(): void {
   });
 }
 
+/**
+ * Show the browser install dialog using the saved beforeinstallprompt event.
+ * Clears the deferred prompt only after the browser resolves userChoice (accepted or dismissed),
+ * because a single BeforeInstallPromptEvent can only call prompt() once.
+ */
 export async function promptInstallNameCardScan(): Promise<"accepted" | "dismissed" | "unavailable"> {
-  const promptEvent = deferredPrompt;
-  if (!promptEvent) return "unavailable";
+  const promptEvent = getDeferredInstallPrompt();
+  if (!promptEvent || isStandaloneDisplay()) return "unavailable";
   try {
     await promptEvent.prompt();
     const choice = await promptEvent.userChoice;
-    deferredPrompt = null;
-    if (choice.outcome === "accepted") dismissInstallPrompt();
+    clearDeferredPrompt();
     return choice.outcome;
   } catch {
     return "unavailable";
   }
 }
 
-export { INSTALL_EVENT };
+export { INSTALL_EVENT, INSTALL_GONE_EVENT };

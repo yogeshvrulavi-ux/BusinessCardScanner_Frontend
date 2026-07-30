@@ -7,6 +7,7 @@ import type { ContactStatus } from "@/lib/contactStatus";
 import { contactBelongsToAppUser, getCurrentAppUser } from "@/lib/currentAppUser";
 import {
   getOutreachStatusForContactSync,
+  overwriteOutreachCacheFromBackend,
   type OutreachDeliveryRecord,
 } from "@/lib/outreachStatusStorage";
 import { getCurrentAppUserSync } from "@/lib/currentAppUser";
@@ -48,7 +49,8 @@ const ACCENTS = [
   "from-cyan-500 to-blue-500",
 ];
 
-function attachOutreachStatus<T extends Pick<DirectoryContact, "email" | "phone" | "name">>(
+/** Map PostgreSQL delivery fields (+ optional local cache) onto contact row icons. */
+export function attachOutreachStatus<T extends Pick<DirectoryContact, "email" | "phone" | "name">>(
   contact: T,
   backend?: {
     emailSent?: boolean;
@@ -68,37 +70,51 @@ function attachOutreachStatus<T extends Pick<DirectoryContact, "email" | "phone"
     },
     getCurrentAppUserSync(),
   );
-  const backendUpdatedAt = backend?.updatedAt || new Date(0).toISOString();
+  const backendUpdatedAt = backend?.updatedAt || new Date().toISOString();
   const backendRecord = (
     status?: string,
     sent?: boolean,
     error?: string,
   ): OutreachDeliveryRecord | undefined => {
-    if (sent || status === "success") {
+    const normalized = String(status || "")
+      .trim()
+      .toLowerCase();
+    // No DB value yet — allow temporary offline localStorage cache.
+    if (!normalized && sent !== true) {
+      return undefined;
+    }
+    if (sent || normalized === "success" || normalized === "sent") {
       return { state: "success", attempted: true, updatedAt: backendUpdatedAt };
     }
-    if (status === "failure") {
+    if (normalized === "failure" || normalized === "failed") {
       return { state: "failure", attempted: true, error, updatedAt: backendUpdatedAt };
     }
-    if (status === "not_sent") {
+    if (normalized === "not_sent" || normalized === "skipped") {
       return { state: "skipped", attempted: false, error, updatedAt: backendUpdatedAt };
     }
-    if (status === "pending") {
-      return { state: "unknown", attempted: false, error, updatedAt: backendUpdatedAt };
-    }
-    return undefined;
+    // Explicit Pending (or unknown DB string): DB wins over stale local cache.
+    return { state: "unknown", attempted: false, error, updatedAt: backendUpdatedAt };
   };
+
+  const emailDelivery =
+    backendRecord(backend?.emailStatus, backend?.emailSent, backend?.emailError) ??
+    outreach.emailDelivery;
+  const whatsappDelivery =
+    backendRecord(backend?.whatsappStatus, backend?.whatsappSent, backend?.whatsappError) ??
+    outreach.whatsappDelivery;
+
+  // Once the API/DB has spoken, overwrite the offline cache so UI stays in sync.
+  if (backend && (backend.emailStatus || backend.whatsappStatus || backend.emailSent || backend.whatsappSent)) {
+    overwriteOutreachCacheFromBackend(
+      { email: contact.email, phone: contact.phone, name: contact.name },
+      { emailDelivery, whatsappDelivery },
+    );
+  }
+
   return {
     ...contact,
-    emailDelivery:
-      backendRecord(backend?.emailStatus, backend?.emailSent, backend?.emailError) ??
-      outreach.emailDelivery,
-    whatsappDelivery:
-      backendRecord(
-        backend?.whatsappStatus,
-        backend?.whatsappSent,
-        backend?.whatsappError,
-      ) ?? outreach.whatsappDelivery,
+    emailDelivery,
+    whatsappDelivery,
   };
 }
 
