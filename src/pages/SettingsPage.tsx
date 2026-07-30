@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { PageShell } from "@/components/layout/PageShell";
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
+import { GoogleDriveConnectCard } from "@/components/settings/GoogleDriveConnectCard";
 import { PAGE } from "@/constants/navigation";
 import {
   COOKIE_POLICY_SECTIONS,
@@ -79,7 +80,8 @@ function SettingRow({
 
 export function SettingsPage() {
   const { confirm } = useConfirmModal();
-  const { user: authUser, refetchProfile } = useAuth();
+  const { user: authUser, refetchProfile, hasRole } = useAuth();
+  const showGoogleDrive = hasRole("ADMIN", "SUPER_ADMIN");
   const [profile, setProfile] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [isSaving, setIsSaving] = useState(false);
   const [isWiping, setIsWiping] = useState(false);
@@ -203,6 +205,8 @@ export function SettingsPage() {
           onChange={updateProfileField}
           onSave={handleSaveProfile}
         />
+
+        {showGoogleDrive ? <GoogleDriveConnectCard /> : null}
 
         <Card className="flex h-full flex-col rounded-2xl border-border/60 p-6 shadow-soft lg:col-span-2">
           <div className="flex items-center gap-2 text-sm font-medium">

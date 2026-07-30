@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@/lib/api";
 import { apiFetch } from "@/lib/apiFetch";
+import { getAuthBearerToken } from "@/lib/authSession";
 import { getQueueItems, type QueueItem } from "@/lib/indexeddb";
 
 type PlatformQueueRecord = {
@@ -51,12 +52,19 @@ function snapshotBody(items: QueueItem[]) {
 /** Best-effort mirror only; IndexedDB remains the synchronization source. */
 export async function publishOfflineQueueSnapshot(items?: QueueItem[]): Promise<void> {
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
+
+  // Skip before auth is ready — endpoint requires JWT (otherwise noisy 401s on boot).
+  const token = await getAuthBearerToken();
+  if (!token) return;
+
   const currentItems = items ?? (await getQueueItems());
   const response = await apiFetch(`${API_BASE_URL}/api/offline-queue/snapshot`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(snapshotBody(currentItems)),
   });
+  // Expired session / permission — ignore; auto-sync and UI still work from IndexedDB.
+  if (response.status === 401 || response.status === 403) return;
   if (!response.ok) throw new Error(`Queue snapshot failed (${response.status})`);
 }
 

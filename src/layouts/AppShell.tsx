@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Outlet, useRouteContext, useRouter, useRouterState } from "@tanstack/react-router";
+import { Outlet, useRouteContext, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
@@ -18,7 +18,6 @@ import { useForceLightMode } from "@/hooks/useForceLightMode";
 import { publishOfflineQueueSnapshot } from "@/lib/offlineQueueRegistry";
 export function AppShell() {
   const { queryClient } = useRouteContext({ from: "__root__" });
-  const router = useRouter();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isAuthRoute = pathname.startsWith("/auth");
   const isRegisterRoute = pathname.startsWith("/register");
@@ -31,13 +30,9 @@ export function AppShell() {
     if (typeof window === "undefined") return;
     if (isPublicShellRoute) return;
 
-    // Avoid preloading /settings — TanStack Router can throw `_nonReactive`
-    // during early preload before auth/store context is ready (also triggers
-    // noisy 401 + service-worker fetch failures for /settings).
-    const routesToPreload = ["/scan", "/contacts", "/queue"];
-    routesToPreload.forEach((path) => {
-      void router.preloadRoute({ to: path }).catch(() => undefined);
-    });
+    // Do not call router.preloadRoute() here. Concurrent preloads + navigation
+    // can evict the cached match mid-flight and crash TanStack Router with
+    // `Cannot read properties of undefined (reading '_nonReactive')`.
 
     if ("serviceWorker" in navigator) {
       if (import.meta.env.DEV) {
@@ -130,7 +125,7 @@ export function AppShell() {
       window.removeEventListener("cs-connection-mode-changed", handleConnectionModeChange);
       window.removeEventListener("cs-queue-updated", reportQueueUpdate);
     };
-  }, [router, isPublicShellRoute]);
+  }, [isPublicShellRoute]);
 
   if (isPublicShellRoute) {
     return (
