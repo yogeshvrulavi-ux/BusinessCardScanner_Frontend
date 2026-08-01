@@ -1,5 +1,5 @@
 import { getQueueItems } from "@/lib/indexeddb";
-import { syncAllQueueItems } from "@/lib/contactStorage";
+import { runAutoSyncWhenOnline } from "@/lib/contactStorage";
 import { loadUserSettings } from "@/lib/settingsStorage";
 
 export type AutoSyncSummary = {
@@ -51,16 +51,23 @@ export async function maybeAutoSyncWhenOnline(): Promise<AutoSyncSummary> {
     return { ...empty, queueRemaining: 0 };
   }
 
-  const result = await syncAllQueueItems({
+  // Use shared auto-sync lock so login / AppShell / Settings cannot double-process.
+  const result = await runAutoSyncWhenOnline({
     skipWhatsApp: !prefs.whatsappNotificationsEnabled,
     skipEmail: !prefs.emailNotificationsEnabled,
-    includeFailed: true,
   });
+
+  const remaining = (await getQueueItems()).filter(
+    (item) =>
+      item.status === "pending" ||
+      item.status === "retrying" ||
+      item.status === "failed",
+  ).length;
 
   return {
     ran: true,
-    queueSynced: result.synced,
-    queueTotal: result.total,
-    queueRemaining: result.remaining,
+    queueSynced: result.queueSynced,
+    queueTotal: result.queueTotal,
+    queueRemaining: remaining,
   };
 }

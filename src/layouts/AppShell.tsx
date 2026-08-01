@@ -19,6 +19,9 @@ import { loadUserSettings } from "@/lib/settingsStorage";
 import { useForceLightMode } from "@/hooks/useForceLightMode";
 import { publishOfflineQueueSnapshot } from "@/lib/offlineQueueRegistry";
 
+/** Module-level guard — online + mode-change can fire together on reconnect. */
+let appShellAutoSyncInFlight = false;
+
 export function AppShell() {
   const { queryClient } = useRouteContext({ from: "__root__" });
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -39,14 +42,16 @@ export function AppShell() {
 
     const processAutoSync = async () => {
       if (!navigator.onLine) return;
-
-      // Report before auto-sync removes successful items, then reconcile after.
-      await publishOfflineQueueSnapshot().catch(() => undefined);
-
-      const prefs = loadUserSettings();
-      if (!prefs.autoSyncQueueWhenOnline) return;
+      if (appShellAutoSyncInFlight) return;
+      appShellAutoSyncInFlight = true;
 
       try {
+        // Report before auto-sync removes successful items, then reconcile after.
+        await publishOfflineQueueSnapshot().catch(() => undefined);
+
+        const prefs = loadUserSettings();
+        if (!prefs.autoSyncQueueWhenOnline) return;
+
         const pending = await countPendingSync();
         const totalPending = pending.queue;
         if (totalPending === 0) return;
@@ -68,11 +73,12 @@ export function AppShell() {
           }
           if (synced > 0 && showToast) {
             const remaining = summary.queueRemaining;
-            toast.success(
-              remaining > 0
-                ? `Synced ${synced} of ${total} contact(s). ${remaining} still pending.`
-                : `Synced ${synced} contact(s) to database. Offline queue is empty.`,
-            );
+            toast.success("Internet Restored", {
+              description:
+                remaining > 0
+                  ? `${synced} of ${total} contacts synced. ${remaining} still pending.`
+                  : `${synced} contact${synced === 1 ? "" : "s"} synced successfully.`,
+            });
           }
 
           window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
@@ -84,6 +90,8 @@ export function AppShell() {
       } catch {
         /* auto-sync is best-effort */
         window.dispatchEvent(new CustomEvent("cs-sync-end"));
+      } finally {
+        appShellAutoSyncInFlight = false;
       }
     };
 
@@ -103,7 +111,8 @@ export function AppShell() {
 
     const handleConnectionModeChange = (e: Event) => {
       const mode = (e as CustomEvent<"online" | "offline">).detail;
-      if (mode === "online" && navigator.onLine) {
+      // online event already triggers processAutoSync; skip duplicate from mode change.
+      if (mode === "online" && navigator.onLine && !appShellAutoSyncInFlight) {
         void processAutoSync();
       }
     };

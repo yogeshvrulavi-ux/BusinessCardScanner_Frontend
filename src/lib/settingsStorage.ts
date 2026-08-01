@@ -25,8 +25,6 @@ export type UserSettings = {
 };
 
 const STORAGE_KEY = "cs-user-settings";
-/** One-time reset so existing browsers adopt the new outreach-off defaults. */
-const OUTREACH_DEFAULTS_OFF_MIGRATION_KEY = "cs-outreach-defaults-off-v1";
 /** One-time cleanup of old placeholder profile values ("Workspace owner" etc.). */
 const PROFILE_PLACEHOLDERS_MIGRATION_KEY = "cs-profile-placeholders-cleared-v1";
 /** Old defaults that were silently saved as if the user had typed them. */
@@ -73,7 +71,7 @@ export function loadUserSettings(): UserSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY, "1");
+      // No stored prefs — WhatsApp + Email default ON for new / first-visit users.
       localStorage.setItem(PROFILE_PLACEHOLDERS_MIGRATION_KEY, "1");
       return { ...DEFAULT_USER_SETTINGS };
     }
@@ -91,25 +89,20 @@ export function loadUserSettings(): UserSettings {
     const autoSyncQueueWhenOnline =
       parsed.autoSyncQueueWhenOnline ??
       DEFAULT_USER_SETTINGS.autoSyncQueueWhenOnline;
-    const needsOutreachDefaultsMigration =
-      !localStorage.getItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY);
 
-    const merged = {
+    // Merge defaults first so missing keys (incl. WhatsApp/Email) stay ON.
+    // Explicitly saved false continues to win via ...parsed.
+    return {
       ...DEFAULT_USER_SETTINGS,
       ...parsed,
       autoSyncQueueWhenOnline,
-      ...(needsOutreachDefaultsMigration
-        ? {
-            emailNotificationsEnabled: false,
-            whatsappNotificationsEnabled: false,
-          }
-        : {}),
+      emailNotificationsEnabled:
+        parsed.emailNotificationsEnabled ??
+        DEFAULT_USER_SETTINGS.emailNotificationsEnabled,
+      whatsappNotificationsEnabled:
+        parsed.whatsappNotificationsEnabled ??
+        DEFAULT_USER_SETTINGS.whatsappNotificationsEnabled,
     };
-    if (needsOutreachDefaultsMigration) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      localStorage.setItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY, "1");
-    }
-    return merged;
   } catch {
     return { ...DEFAULT_USER_SETTINGS };
   }

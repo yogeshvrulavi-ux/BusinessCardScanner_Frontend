@@ -98,20 +98,24 @@ export function ScanPage() {
     return true;
   };
 
-  /** Upload icon flow: pick from local folder, OCR as-is, then review */
+  /** Upload icon flow: pick from local folder → optimize → OCR → review */
   const handleUploadFromFolder = async (selectedFile: File) => {
     if (!processFile(selectedFile)) return;
     try {
       const dataUrl = await readFileAsDataUrl(selectedFile);
       captureSourceRef.current = "Upload";
       await runScanPipeline(selectedFile, dataUrl, true);
+      // Prefer optimized session image for any remaining preview before navigate.
+      const { loadScanSession } = await import("@/lib/scanSession");
+      const session = loadScanSession();
+      if (session.imageDataUrl) setPreview(session.imageDataUrl);
     } catch (err) {
       console.error(err);
       setError("Failed to read the selected image.");
     }
   };
 
-  /** Camera icon flow: capture, OCR as-is, then review (camera stays open until Continue) */
+  /** Camera icon flow: capture → optimize → OCR → review */
   const handleCameraCapture = async (capturedFile: File) => {
     setCameraOpen(false);
     if (!processFile(capturedFile)) return;
@@ -119,6 +123,9 @@ export function ScanPage() {
       const dataUrl = await readFileAsDataUrl(capturedFile);
       captureSourceRef.current = "Camera";
       await runScanPipeline(capturedFile, dataUrl, true);
+      const { loadScanSession } = await import("@/lib/scanSession");
+      const session = loadScanSession();
+      if (session.imageDataUrl) setPreview(session.imageDataUrl);
     } catch (err) {
       console.error(err);
       setError("Failed to process camera capture.");

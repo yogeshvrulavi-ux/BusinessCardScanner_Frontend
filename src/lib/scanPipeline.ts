@@ -1,8 +1,9 @@
 import { emptyScanContact, type ScanContact } from "@/lib/scanResult";
 import { runBrowserOcr } from "@/lib/browserOcr";
-import { compressDataUrlForStorage, storeScanSession } from "@/lib/scanSession";
+import { storeScanSession } from "@/lib/scanSession";
 import { getConnectionMode, isOfflineMode } from "@/lib/connectionMode";
 import { enhanceOfflineCameraCapture } from "@/lib/offlineCameraPreprocess";
+import { optimizeCardImage } from "@/lib/optimizeCardImage";
 import { apiFetch } from "@/lib/apiFetch";
 import { API_BASE_URL } from "@/lib/api";
 
@@ -147,18 +148,24 @@ export async function scanFileAndStore(
   onProgress?: (update: ScanProgress) => void,
   captureSource?: string,
 ): Promise<ScanExtractionResult> {
-  const result = await extractContactFromImage(file, onProgress, captureSource);
-  // OCR uses the full-quality capture; compress only afterward for session/storage size.
-  const storedImage =
-    captureSource === "Camera" && imageDataUrl
-      ? await compressDataUrlForStorage(imageDataUrl)
-      : imageDataUrl;
-  storeScanSession(result.contact, storedImage, {
+  // Optimize once for Gallery + Camera before OCR / session / storage.
+  onProgress?.({ progress: 8, message: "Optimizing image…" });
+  const optimized = await optimizeCardImage(file, captureSource, imageDataUrl);
+
+  const result = await extractContactFromImage(
+    optimized.file,
+    onProgress,
+    captureSource,
+  );
+
+  storeScanSession(result.contact, optimized.dataUrl, {
     rawText: result.rawText,
     ocrWarning: result.ocrWarning,
     ocrEngine: result.ocrEngine,
     ocrConfidence: result.ocrConfidence,
     captureSource,
+    originalImageBytes: optimized.originalBytes,
+    optimizedImageBytes: optimized.optimizedBytes,
   });
   return result;
 }

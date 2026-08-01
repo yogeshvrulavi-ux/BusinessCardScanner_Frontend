@@ -73,8 +73,20 @@ export function GoogleDriveConnectCard() {
   const handleConnect = async () => {
     setBusy(true);
     try {
-      const data = await fetchJson<{ authorize_url: string }>("/api/google/oauth/start");
-      if (!data.authorize_url) throw new Error("No authorize URL returned.");
+      const data = await fetchJson<{
+        authorize_url?: string | null;
+        oauth_configured?: boolean;
+        message?: string;
+      }>("/api/google/oauth/start");
+      if (data.oauth_configured === false || !data.authorize_url) {
+        setStatus((prev) => ({ ...(prev || {}), oauth_configured: false, connected: false }));
+        toast.message(
+          data.message ||
+            "Google OAuth is not configured on the server. Google Drive connect is disabled.",
+        );
+        setBusy(false);
+        return;
+      }
       window.location.href = data.authorize_url;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not start Google connect.");
@@ -116,6 +128,21 @@ export function GoogleDriveConnectCard() {
 
   const connected = Boolean(status?.connected);
   const sheetUrl = status?.sheet_url;
+  const lastDriveSync = status?.connected_at
+    ? new Date(status.connected_at).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
+
+  const connectionLabel =
+    status?.oauth_configured === false
+      ? "Not configured"
+      : connected
+        ? "Connected"
+        : "Not Connected";
 
   return (
     <Card className="flex h-full flex-col rounded-2xl border-border/60 p-6 shadow-soft">
@@ -128,47 +155,54 @@ export function GoogleDriveConnectCard() {
       </p>
 
       {loading ? (
-        <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="mt-5 flex flex-1 items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Checking connection…
         </div>
       ) : (
-        <div className="mt-5 space-y-3">
-          <div className="rounded-xl border border-border/60 bg-muted/30 p-4 text-sm">
-            {status?.oauth_configured === false ? (
-              <p className="text-muted-foreground">
-                Google OAuth is not configured on the server yet. Place{" "}
-                <code className="text-[11px]">secrets/client_secret_*.json</code> or set{" "}
-                <code className="text-[11px]">GOOGLE_OAUTH_CLIENT_ID</code> /{" "}
-                <code className="text-[11px]">SECRET</code> /{" "}
-                <code className="text-[11px]">REDIRECT_URI</code>, then restart the backend.
-              </p>
-            ) : connected ? (
-              <>
-                <p>
-                  Connected as{" "}
-                  <span className="font-medium">{status?.google_email || "Google account"}</span>
-                </p>
-                {sheetUrl ? (
-                  <a
-                    href={sheetUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    Open company sheet <ExternalLink className="h-3 w-3" />
-                  </a>
-                ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    No sheet yet — click Create / refresh sheet.
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-muted-foreground">Not connected. Connect Google Drive to create your sheet.</p>
-            )}
+        <div className="mt-4 flex flex-1 flex-col">
+          <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-1">
+            <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2.5">
+              <span className="text-xs text-muted-foreground">Connection Status</span>
+              <span className="text-sm font-medium text-foreground">{connectionLabel}</span>
+            </div>
+            {connected ? (
+              <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2.5">
+                <span className="text-xs text-muted-foreground">Connected As</span>
+                <span className="max-w-[55%] truncate text-right text-sm font-medium text-foreground">
+                  {status?.google_email || "Google account"}
+                </span>
+              </div>
+            ) : null}
+            <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2.5">
+              <span className="text-xs text-muted-foreground">Last Drive Sync</span>
+              <span className="text-sm font-medium tabular-nums text-foreground">{lastDriveSync}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 py-2.5">
+              <span className="text-xs text-muted-foreground">Drive Folder</span>
+              {sheetUrl ? (
+                <a
+                  href={sheetUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex max-w-[55%] items-center gap-1 truncate text-sm font-medium text-primary hover:underline"
+                >
+                  Open sheet <ExternalLink className="h-3 w-3 shrink-0" />
+                </a>
+              ) : (
+                <span className="text-sm font-medium text-foreground">—</span>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          {status?.oauth_configured === false ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Place <code className="text-[11px]">secrets/client_secret_*.json</code> or set{" "}
+              <code className="text-[11px]">GOOGLE_OAUTH_CLIENT_ID</code> / SECRET / REDIRECT_URI,
+              then restart the backend.
+            </p>
+          ) : null}
+
+          <div className="mt-auto flex flex-wrap gap-2 pt-4">
             {!connected ? (
               <Button type="button" disabled={busy || status?.oauth_configured === false} onClick={handleConnect}>
                 {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
