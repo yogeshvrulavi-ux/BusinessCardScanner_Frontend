@@ -27,6 +27,8 @@ export type UserSettings = {
 const STORAGE_KEY = "cs-user-settings";
 /** One-time reset so existing browsers adopt the new outreach-off defaults. */
 const OUTREACH_DEFAULTS_OFF_MIGRATION_KEY = "cs-outreach-defaults-off-v1";
+/** Re-enable thank-you email after SES cutover (previous migration forced email off). */
+const EMAIL_OUTREACH_REENABLE_KEY = "cs-email-outreach-reenable-ses-v1";
 /** One-time cleanup of old placeholder profile values ("Workspace owner" etc.). */
 const PROFILE_PLACEHOLDERS_MIGRATION_KEY = "cs-profile-placeholders-cleared-v1";
 /** Old defaults that were silently saved as if the user had typed them. */
@@ -100,7 +102,7 @@ export function loadUserSettings(): UserSettings {
       autoSyncQueueWhenOnline,
       ...(needsOutreachDefaultsMigration
         ? {
-            emailNotificationsEnabled: false,
+            // Keep WhatsApp opt-in; email stays on by default (SES thank-you flow).
             whatsappNotificationsEnabled: false,
           }
         : {}),
@@ -109,6 +111,14 @@ export function loadUserSettings(): UserSettings {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       localStorage.setItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY, "1");
     }
+
+    // Browsers that already ran the old "email off" migration: turn email back on once.
+    if (!localStorage.getItem(EMAIL_OUTREACH_REENABLE_KEY)) {
+      merged.emailNotificationsEnabled = true;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      localStorage.setItem(EMAIL_OUTREACH_REENABLE_KEY, "1");
+    }
+
     return merged;
   } catch {
     return { ...DEFAULT_USER_SETTINGS };
