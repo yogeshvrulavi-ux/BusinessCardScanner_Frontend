@@ -4,6 +4,7 @@ import { Search, Filter, RefreshCw, Plus, Trash2, Send, Loader2 } from "lucide-r
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -29,8 +30,8 @@ import {
   invalidateContactsDirectory,
   type DirectoryContact,
 } from "@/lib/contactsDirectory";
-import { fetchContactById, fetchContactsPage } from "@/lib/contactsPageApi";
-import { getQueueItems } from "@/lib/indexeddb";
+import { fetchContactById, fetchContactsPage, mapRawContact } from "@/lib/contactsPageApi";
+import { getCachedContacts, getQueueItems } from "@/lib/indexeddb";
 import { loadEvents, resolveEventNameForContact } from "@/lib/eventStorage";
 import { contactBelongsToAppUser, getCurrentAppUser, getCurrentAppUserSync } from "@/lib/currentAppUser";
 import { getOutreachStatusForContactSync } from "@/lib/outreachStatusStorage";
@@ -154,6 +155,8 @@ export function ContactsPage() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   /** Debounce search so each keystroke does not hit Postgres. */
   const [debouncedQ, setDebouncedQ] = useState(q);
@@ -183,15 +186,8 @@ export function ContactsPage() {
   };
 
   const { settings: userSettings } = useUserSettings();
-  const showWhatsAppTemplateStatus = userSettings.whatsappNotificationsEnabled;
-  const showEmailTemplateStatus = userSettings.emailNotificationsEnabled;
-  const showTemplateStatusColumn = showWhatsAppTemplateStatus || showEmailTemplateStatus;
-  const templateColumnLabel = [
-    showWhatsAppTemplateStatus ? "WhatsApp" : null,
-    showEmailTemplateStatus ? "Email" : null,
-  ]
-    .filter(Boolean)
-    .join(" / ");
+  const whatsappEnabled = Boolean(userSettings.whatsappNotificationsEnabled);
+  const emailEnabled = Boolean(userSettings.emailNotificationsEnabled);
 
   const contactsList = useMemo(() => {
     if (page === 1) return [...queueContacts, ...dbContacts];
@@ -211,9 +207,22 @@ export function ContactsPage() {
       try {
         setError(null);
         const filters = { q: debouncedQ, event: eventFilter || undefined };
+        const queuePromise = loadQueueAsDirectoryContacts();
+
+        // Offline: keep the app usable with IndexedDB queue + local cache (no error page).
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const [queue, cached] = await Promise.all([queuePromise, getCachedContacts()]);
+          const mapped = cached.map((c, i) => mapRawContact(c as Record<string, unknown>, i));
+          setQueueContacts(queue);
+          setDbContacts(mapped);
+          setTotal(mapped.length);
+          if (!silent) setSelectedKeys(new Set());
+          return;
+        }
+
         const [pageRes, queue] = await Promise.all([
           fetchContactsPage(targetPage, TABLE_PAGE_SIZE, filters),
-          loadQueueAsDirectoryContacts(),
+          queuePromise,
         ]);
         const nextPage = clampPageAfterDelete(targetPage, pageRes.total, TABLE_PAGE_SIZE);
         if (nextPage !== targetPage) {
@@ -226,8 +235,27 @@ export function ContactsPage() {
           setTotal(pageRes.total);
         }
         setQueueContacts(queue);
+        if (!silent) setSelectedKeys(new Set());
       } catch (err: unknown) {
         console.error(err);
+        // Network failure while supposedly online — still fall back to local data.
+        try {
+          const [queue, cached] = await Promise.all([
+            loadQueueAsDirectoryContacts(),
+            getCachedContacts(),
+          ]);
+          if (queue.length > 0 || cached.length > 0) {
+            setQueueContacts(queue);
+            const mapped = cached.map((c, i) => mapRawContact(c as Record<string, unknown>, i));
+            setDbContacts(mapped);
+            setTotal(mapped.length);
+            setError(null);
+            if (!silent) setSelectedKeys(new Set());
+            return;
+          }
+        } catch {
+          /* fall through to error UI */
+        }
         setError(err instanceof Error ? err.message : "Failed to load contacts.");
         if (!silent) toast.error("Failed to load contacts.");
       } finally {
@@ -355,12 +383,27 @@ export function ContactsPage() {
     try {
       await deleteDirectoryContact(contact);
       removeContact(contact);
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(contactRowKey(contact));
+        return next;
+      });
       toast.success(contact.source === "queue" ? "Queued contact removed." : "Contact deleted.");
       void reloadContacts({ force: true, silent: true });
     } catch (err: unknown) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to delete contact.");
     }
+  };
+
+  const toggleSelectContact = (contact: Contact, checked: boolean) => {
+    const key = contactRowKey(contact);
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
   };
 
   const filtered = useMemo(() => {
@@ -384,6 +427,61 @@ export function ContactsPage() {
       return true;
     });
   }, [contactsList, tab, q, eventFilter]);
+
+  const allVisibleSelected =
+    canDelete && filtered.length > 0 && filtered.every((c) => selectedKeys.has(contactRowKey(c)));
+  const someVisibleSelected =
+    canDelete && filtered.some((c) => selectedKeys.has(contactRowKey(c)));
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      for (const contact of filtered) {
+        const key = contactRowKey(contact);
+        if (checked) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!canDelete || selectedKeys.size === 0) return;
+    const selected = filtered.filter((c) => selectedKeys.has(contactRowKey(c)));
+    if (selected.length === 0) return;
+
+    const count = selected.length;
+    const ok = await confirm({
+      title: `Delete ${count} selected contact${count === 1 ? "" : "s"}?`,
+      description: "This action cannot be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setIsBulkDeleting(true);
+    let deleted = 0;
+    try {
+      for (const contact of selected) {
+        try {
+          await deleteDirectoryContact(contact);
+          removeContact(contact);
+          deleted += 1;
+        } catch (err) {
+          console.error(err);
+        }
+      }
+      setSelectedKeys(new Set());
+      if (deleted > 0) {
+        toast.success(`${deleted} contact${deleted === 1 ? "" : "s"} deleted successfully.`);
+        void reloadContacts({ force: true, silent: true });
+      } else {
+        toast.error("Could not delete the selected contacts.");
+      }
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
 
   const eventFilterOptions = useMemo(() => {
     const names = new Set<string>();
@@ -466,6 +564,22 @@ export function ContactsPage() {
               </span>
             ) : null}
           </Button>
+          {canDelete && (
+            <Button
+              variant="outline"
+              onClick={() => void handleBulkDelete()}
+              disabled={selectedKeys.size === 0 || isBulkDeleting}
+              className="w-full sm:w-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              {isBulkDeleting ? (
+                <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4 shrink-0" />
+              )}
+              Delete Selected
+              {selectedKeys.size > 0 ? ` (${selectedKeys.size})` : ""}
+            </Button>
+          )}
           <Button
             onClick={() => void navigate({ to: "/scan" })}
             className="w-full sm:w-auto"
@@ -552,6 +666,16 @@ export function ContactsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
                   <tr>
+                    {canDelete && (
+                      <th className="w-10 px-3 py-3">
+                        <Checkbox
+                          checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                          onCheckedChange={(value) => toggleSelectAllVisible(value === true)}
+                          aria-label="Select all contacts"
+                          className="border-white data-[state=checked]:bg-white data-[state=checked]:text-primary data-[state=indeterminate]:bg-white data-[state=indeterminate]:text-primary"
+                        />
+                      </th>
+                    )}
                     <th className="px-4 py-3 font-bold text-white">Contact Name</th>
                     <th className="px-4 py-3 font-bold text-white">Card</th>
                     <th className="px-4 py-3 font-bold text-white">Company</th>
@@ -566,7 +690,7 @@ export function ContactsPage() {
                     )}
                     {isAdmin && <th className="px-4 py-3 font-bold text-white">Captured By</th>}
                     <th className="px-4 py-3 font-bold text-white">Event</th>
-                    {showTemplateStatusColumn && <th className="px-4 py-3 font-bold text-white">{templateColumnLabel}</th>}
+                    <th className="px-4 py-3 font-bold text-white">WhatsApp / Email</th>
                     <th className="px-4 py-3 font-bold text-white">Status</th>
                     <th className="px-4 py-3 font-bold text-white">Created</th>
                     <th className="px-4 py-3 font-bold text-white text-right">Actions</th>
@@ -576,8 +700,18 @@ export function ContactsPage() {
                   {filtered.map((c) => {
                     const rowKey = contactRowKey(c);
                     const isHighlighted = highlight === rowKey;
+                    const isSelected = selectedKeys.has(rowKey);
                     return (
-                    <tr key={rowKey} id={`contact-row-${rowKey}`} className={cn("transition", isHighlighted ? "bg-primary/10 ring-2 ring-inset ring-primary/35" : "hover:bg-muted/30")}>
+                    <tr key={rowKey} id={`contact-row-${rowKey}`} className={cn("transition", isHighlighted ? "bg-primary/10 ring-2 ring-inset ring-primary/35" : isSelected ? "bg-muted/40" : "hover:bg-muted/30")}>
+                      {canDelete && (
+                        <td className="px-3 py-3">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(value) => toggleSelectContact(c, value === true)}
+                            aria-label={`Select ${c.name || "contact"}`}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <InitialsAvatar initials={c.initials} accent={c.accent} />
@@ -610,11 +744,17 @@ export function ContactsPage() {
                         <td className="px-4 py-3 text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
                       )}
                       <td className="px-4 py-3 text-muted-foreground">{c.eventName || "\u2014"}</td>
-                      {showTemplateStatusColumn && (
-                        <td className="px-4 py-3">
-                          <ContactChannelIcons phone={c.phone} email={c.email} whatsappDelivery={c.whatsappDelivery} emailDelivery={c.emailDelivery} showWhatsApp={showWhatsAppTemplateStatus} showEmail={showEmailTemplateStatus} />
+                      <td className="px-4 py-3">
+                          <ContactChannelIcons
+                            phone={c.phone}
+                            email={c.email}
+                            whatsappDelivery={c.whatsappDelivery}
+                            emailDelivery={c.emailDelivery}
+                            whatsappEnabled={whatsappEnabled}
+                            emailEnabled={emailEnabled}
+                            queued={c.source === "queue"}
+                          />
                         </td>
-                      )}
                       <td className="px-4 py-3"><StatusPill status={c.status} /></td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(c.createdAt)}</td>
                       <td className="px-4 py-3 text-right">
@@ -640,12 +780,31 @@ export function ContactsPage() {
 
             {/* Mobile & tablet cards */}
             <div className="mt-5 space-y-3 lg:hidden">
+              {canDelete && filtered.length > 0 && (
+                <div className="flex items-center gap-2 px-1">
+                  <Checkbox
+                    checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                    onCheckedChange={(value) => toggleSelectAllVisible(value === true)}
+                    aria-label="Select all contacts"
+                  />
+                  <span className="text-xs text-muted-foreground">Select all</span>
+                </div>
+              )}
               {filtered.map((c) => {
                 const rowKey = contactRowKey(c);
                 const isHighlighted = highlight === rowKey;
+                const isSelected = selectedKeys.has(rowKey);
                 return (
-                <div key={rowKey} id={`contact-row-${rowKey}`} className={cn("rounded-xl border p-3 sm:p-4 transition", isHighlighted ? "border-primary/50 bg-primary/10 ring-2 ring-primary/30" : "border-border/60 bg-card/40")}>
+                <div key={rowKey} id={`contact-row-${rowKey}`} className={cn("rounded-xl border p-3 sm:p-4 transition", isHighlighted ? "border-primary/50 bg-primary/10 ring-2 ring-primary/30" : isSelected ? "border-primary/30 bg-muted/30" : "border-border/60 bg-card/40")}>
                   <div className="flex items-start gap-3">
+                    {canDelete && (
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(value) => toggleSelectContact(c, value === true)}
+                        aria-label={`Select ${c.name || "contact"}`}
+                        className="mt-1"
+                      />
+                    )}
                     <InitialsAvatar
                       initials={c.initials}
                       accent={c.accent}
@@ -676,9 +835,16 @@ export function ContactsPage() {
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
                     <StatusPill status={c.status} />
-                    {showTemplateStatusColumn && (
-                      <ContactChannelIcons phone={c.phone} email={c.email} whatsappDelivery={c.whatsappDelivery} emailDelivery={c.emailDelivery} compact showWhatsApp={showWhatsAppTemplateStatus} showEmail={showEmailTemplateStatus} />
-                    )}
+                    <ContactChannelIcons
+                      phone={c.phone}
+                      email={c.email}
+                      whatsappDelivery={c.whatsappDelivery}
+                      emailDelivery={c.emailDelivery}
+                      compact
+                      whatsappEnabled={whatsappEnabled}
+                      emailEnabled={emailEnabled}
+                      queued={c.source === "queue"}
+                    />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {c.source === "queue" && (

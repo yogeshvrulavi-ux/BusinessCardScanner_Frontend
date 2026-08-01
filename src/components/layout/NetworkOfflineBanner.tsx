@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { WifiOff } from "lucide-react";
+import { Check, WifiOff } from "lucide-react";
 import { ConnectivityStatus } from "@/components/pwa/ConnectivityStatus";
 
 export function NetworkOfflineBanner() {
@@ -44,15 +44,31 @@ export function NetworkOfflineBanner() {
     <div
       role="alert"
       aria-live="assertive"
-      className="flex items-center justify-between gap-2 border-t border-destructive/25 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive sm:px-4 md:px-6"
+      className="border-t border-destructive/25 bg-destructive/10 px-3 py-2.5 text-sm text-destructive sm:px-4 md:px-6"
     >
-      <div className="flex min-w-0 items-center gap-2">
-        <WifiOff className="h-4 w-4 shrink-0" aria-hidden />
-        <p className="min-w-0 leading-snug">
-          Offline Mode — captures stay on this device until you&apos;re back online.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1.5">
+          <div className="flex items-center gap-2 font-semibold">
+            <WifiOff className="h-4 w-4 shrink-0" aria-hidden />
+            <span>You are Offline</span>
+          </div>
+          <ul className="space-y-0.5 pl-0.5 text-xs font-medium leading-relaxed text-destructive/90 sm:text-[13px]">
+            <li className="flex items-start gap-1.5">
+              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span>Card scanning is available.</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span>Contacts are being stored locally.</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span>They will automatically sync when internet is restored.</span>
+            </li>
+          </ul>
+        </div>
+        <ConnectivityStatus compact={false} className="shrink-0 self-start" />
       </div>
-      <ConnectivityStatus compact={false} />
     </div>
   );
 }

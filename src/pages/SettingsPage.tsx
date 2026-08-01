@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { PageShell } from "@/components/layout/PageShell";
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { GoogleDriveConnectCard } from "@/components/settings/GoogleDriveConnectCard";
+import { StorageUsageCard } from "@/components/settings/StorageUsageCard";
 import { PAGE } from "@/constants/navigation";
 import {
   COOKIE_POLICY_SECTIONS,
@@ -197,7 +198,7 @@ export function SettingsPage() {
         sections={COOKIE_POLICY_SECTIONS}
       />
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="flex flex-col gap-5">
         <ProfileSettingsCard
           profile={profile}
           initials={initials}
@@ -206,9 +207,18 @@ export function SettingsPage() {
           onSave={handleSaveProfile}
         />
 
-        {showGoogleDrive ? <GoogleDriveConnectCard /> : null}
+        <div
+          className={
+            showGoogleDrive
+              ? "grid grid-cols-1 items-stretch gap-5 md:grid-cols-2"
+              : "grid grid-cols-1 items-stretch gap-5"
+          }
+        >
+          {showGoogleDrive ? <GoogleDriveConnectCard /> : null}
+          <StorageUsageCard />
+        </div>
 
-        <Card className="flex h-full flex-col rounded-2xl border-border/60 p-6 shadow-soft lg:col-span-2">
+        <Card className="flex flex-col rounded-2xl border-border/60 p-6 shadow-soft">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Bell className="h-4 w-4 text-primary" /> Notifications
           </div>

@@ -219,6 +219,12 @@ export function TopBar() {
           </div>
         )}
 
+        {!isOnline && (
+          <span className="hidden rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-destructive sm:inline">
+            Offline
+          </span>
+        )}
+
         <ThemeToggle />
 
         <DropdownMenu>

@@ -174,6 +174,11 @@ async function saveOnlineToPostgres(
   }
 }
 
+/** Prevents overlapping sync runners (auto-sync + manual Sync All) from double-posting. */
+let syncAllInFlight: Promise<{ synced: number; total: number; remaining: number }> | null = null;
+/** Per-queue-id lock so the same contact is never processed twice concurrently. */
+const syncingItemIds = new Set<string>();
+
 /** Sync a single queued contact to the backend. */
 export async function syncQueueItem(
   item: QueueItem,
@@ -186,53 +191,70 @@ export async function syncQueueItem(
   if (!navigator.onLine) {
     throw new Error("No internet connection.");
   }
-  const payload = queueContactToPayload(item.contact_data);
-  const image =
-    item.image_base64 && String(item.image_base64).startsWith("data:image/")
-      ? item.image_base64
-      : undefined;
+  if (syncingItemIds.has(item.id)) {
+    // Another runner is already syncing this queue id — skip to avoid duplicates.
+    return {};
+  }
 
-  // Idempotency: if this contact already exists (e.g. prior sync succeeded but queue
-  // removal failed), update instead of inserting a duplicate row.
+  // Re-read IndexedDB: item may have been removed by a concurrent successful sync.
+  const latest = (await getQueueItems()).find((entry) => entry.id === item.id);
+  if (!latest || latest.status === "synced") {
+    return {};
+  }
+
+  syncingItemIds.add(item.id);
   try {
-    const { checkForDuplicates } = await import("@/lib/duplicateDetection");
-    const dup = await checkForDuplicates(payload);
-    const existingId = dup.duplicates[0]?.contact?.id;
-    if (existingId) {
-      await updateContact(String(existingId), payload, image);
-      await removeQueueItem(item.id);
-      const { recordQueueSyncedToDatabase } = await import("@/lib/captureSourceAnalytics");
-      recordQueueSyncedToDatabase();
-      notifyContactsListChanged(String(existingId));
-      return { id: String(existingId) };
-    }
-  } catch {
-    /* fall through to create */
-  }
+    const payload = queueContactToPayload(latest.contact_data);
+    const image =
+      latest.image_base64 && String(latest.image_base64).startsWith("data:image/")
+        ? latest.image_base64
+        : undefined;
 
-  const result = await saveContactToBackend(payload, {
-    connectionMode: "online",
-    skipWhatsApp: options?.skipWhatsApp,
-    skipEmail: options?.skipEmail,
-    cardImageBase64: image,
-  });
-  if (payload.eventName?.trim()) {
-    recordContactEventLink({
-      eventName: payload.eventName.trim(),
-      email: pickPrimaryEmail(payload),
-      phone: payload.phone,
+    // Idempotency: if this contact already exists (e.g. prior sync succeeded but queue
+    // removal failed), update instead of inserting a duplicate row.
+    try {
+      const { checkForDuplicates } = await import("@/lib/duplicateDetection");
+      const dup = await checkForDuplicates(payload);
+      const existingId = dup.duplicates[0]?.contact?.id;
+      if (existingId) {
+        await updateContact(String(existingId), payload, image);
+        await removeQueueItem(latest.id);
+        const { recordQueueSyncedToDatabase } = await import("@/lib/captureSourceAnalytics");
+        recordQueueSyncedToDatabase();
+        notifyContactsListChanged(String(existingId));
+        return { id: String(existingId) };
+      }
+    } catch {
+      /* fall through to create */
+    }
+
+    const result = await saveContactToBackend(payload, {
+      connectionMode: "online",
+      skipWhatsApp: options?.skipWhatsApp,
+      skipEmail: options?.skipEmail,
+      cardImageBase64: image,
     });
+    if (payload.eventName?.trim()) {
+      recordContactEventLink({
+        eventName: payload.eventName.trim(),
+        email: pickPrimaryEmail(payload),
+        phone: payload.phone,
+      });
+    }
+    // Remove from IndexedDB only after a successful backend response.
+    await removeQueueItem(latest.id);
+    await persistOutreachStatus(payload, result);
+    const { recordQueueSyncedToDatabase } = await import("@/lib/captureSourceAnalytics");
+    recordQueueSyncedToDatabase();
+    notifyContactsListChanged(result.id);
+    return {
+      id: result.id,
+      emailSent: result.emailSent,
+      emailError: result.emailError,
+    };
+  } finally {
+    syncingItemIds.delete(item.id);
   }
-  await removeQueueItem(item.id);
-  await persistOutreachStatus(payload, result);
-  const { recordQueueSyncedToDatabase } = await import("@/lib/captureSourceAnalytics");
-  recordQueueSyncedToDatabase();
-  notifyContactsListChanged(result.id);
-  return {
-    id: result.id,
-    emailSent: result.emailSent,
-    emailError: result.emailError,
-  };
 }
 
 /** Sync all pending/failed queue items to the backend (failed items are retried). */
@@ -241,44 +263,65 @@ export async function syncAllQueueItems(options?: {
   skipEmail?: boolean;
   includeFailed?: boolean;
 }): Promise<{ synced: number; total: number; remaining: number }> {
-  const items = await getQueueItems();
-  const includeFailed = options?.includeFailed !== false;
-  const pending = items.filter(
-    (i) =>
-      i.status === "pending" ||
-      i.status === "retrying" ||
-      (includeFailed && i.status === "failed"),
-  );
-  let synced = 0;
-  for (const item of pending) {
-    // Simple backoff: wait longer after repeated failures (max ~8s).
-    if (item.retry_count > 0) {
-      const delayMs = Math.min(8000, 250 * 2 ** Math.min(item.retry_count, 5));
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-    try {
-      await updateQueueItem({
-        ...item,
-        status: "retrying",
-        last_attempt: new Date().toISOString(),
-      });
-      await syncQueueItem(item, options);
-      synced += 1;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Sync failed";
-      const nextRetry = item.retry_count + 1;
-      // Keep retrying on reconnect — mark failed for UI, but still include in future auto-sync.
-      await updateQueueItem({
-        ...item,
-        status: nextRetry >= 5 ? "failed" : "pending",
-        retry_count: nextRetry,
-        last_attempt: new Date().toISOString(),
-        error_message: message,
-      });
-    }
+  // Coalesce concurrent Sync All / auto-sync callers onto one run.
+  if (syncAllInFlight) {
+    return syncAllInFlight;
   }
-  const remaining = (await getQueueItems()).length;
-  return { synced, total: pending.length, remaining };
+
+  syncAllInFlight = (async () => {
+    const items = await getQueueItems();
+    const includeFailed = options?.includeFailed !== false;
+    const pending = items.filter(
+      (i) =>
+        !syncingItemIds.has(i.id) &&
+        (i.status === "pending" ||
+          i.status === "retrying" ||
+          (includeFailed && i.status === "failed")),
+    );
+    let synced = 0;
+    for (const item of pending) {
+      // Skip if another path already claimed / removed this id mid-loop.
+      if (syncingItemIds.has(item.id)) continue;
+      const stillQueued = (await getQueueItems()).find((entry) => entry.id === item.id);
+      if (!stillQueued || stillQueued.status === "synced") continue;
+
+      // Simple backoff: wait longer after repeated failures (max ~8s).
+      if (stillQueued.retry_count > 0) {
+        const delayMs = Math.min(8000, 250 * 2 ** Math.min(stillQueued.retry_count, 5));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      try {
+        await updateQueueItem({
+          ...stillQueued,
+          status: "retrying",
+          last_attempt: new Date().toISOString(),
+        });
+        const result = await syncQueueItem(stillQueued, options);
+        if (result.id) {
+          synced += 1;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Sync failed";
+        const nextRetry = stillQueued.retry_count + 1;
+        // Keep retrying on reconnect — mark failed for UI, but still include in future auto-sync.
+        const exists = (await getQueueItems()).some((entry) => entry.id === stillQueued.id);
+        if (!exists) continue;
+        await updateQueueItem({
+          ...stillQueued,
+          status: nextRetry >= 5 ? "failed" : "pending",
+          retry_count: nextRetry,
+          last_attempt: new Date().toISOString(),
+          error_message: message,
+        });
+      }
+    }
+    const remaining = (await getQueueItems()).filter((i) => i.status !== "synced").length;
+    return { synced, total: pending.length, remaining };
+  })().finally(() => {
+    syncAllInFlight = null;
+  });
+
+  return syncAllInFlight;
 }
 
 export async function saveContact(

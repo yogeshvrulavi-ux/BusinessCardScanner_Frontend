@@ -21,9 +21,12 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     if (refreshed && refreshed !== token) {
       headers.set("Authorization", `Bearer ${refreshed}`);
       response = await fetch(input, { ...init, headers });
-    } else {
-      // Refresh failed — session is invalid, trigger auto-logout
-      notifyAuthExpired();
+    } else if (typeof navigator === "undefined" || navigator.onLine) {
+      // Refresh failed while online — session is invalid, trigger auto-logout.
+      // When offline, keep the session so capture / queue remain usable.
+      if (!refreshed) {
+        notifyAuthExpired();
+      }
     }
   }
 

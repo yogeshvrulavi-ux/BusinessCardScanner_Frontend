@@ -10,6 +10,10 @@ export type ScanSessionMeta = {
   ocrEngine?: string;
   ocrConfidence?: number;
   captureSource?: string;
+  /** Original file size in bytes before optimization. */
+  originalImageBytes?: number;
+  /** Optimized file size in bytes (what is stored / uploaded). */
+  optimizedImageBytes?: number;
   whatsappQueued?: boolean;
   whatsappError?: string | null;
   whatsappTo?: string | null;
@@ -77,8 +81,9 @@ export async function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 /**
- * Compress a capture for session/DB storage AFTER OCR.
- * Keeps aspect ratio; does not upscale. Quality is tuned for storage size, not OCR.
+ * Compress a capture for session/DB storage.
+ * Prefer optimizeCardImage() for adaptive target-size compression (Gallery + Camera).
+ * Kept for backward compatibility with any direct callers.
  */
 export async function compressDataUrlForStorage(
   dataUrl: string,
@@ -110,6 +115,8 @@ export async function compressDataUrlForStorage(
       }
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, tw, th);
       ctx.drawImage(img, 0, 0, tw, th);
       try {
         resolve(canvas.toDataURL("image/jpeg", quality));
