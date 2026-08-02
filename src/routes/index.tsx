@@ -4,12 +4,12 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Home · NameCardScan" },
-      { name: "description", content: "Manage your NameCardScan subscription and storage." },
-      { property: "og:title", content: "Subscription · NameCardScan" },
-      { property: "og:description", content: "Plan, storage, and upgrades for your workspace." },
+      { name: "description", content: "Capture business cards with on-device OCR." },
+      { property: "og:title", content: "Capture · NameCardScan" },
+      { property: "og:description", content: "Upload or photograph a business card to extract contact details." },
     ],
   }),
   beforeLoad: () => {
-    throw redirect({ to: "/subscription", replace: true });
+    throw redirect({ to: "/scan", replace: true });
   },
 });
