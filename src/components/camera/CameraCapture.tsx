@@ -122,10 +122,11 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const facingModeRef = useRef<"environment" | "user">(pickDefaultFacingMode());
   const stableCountRef = useRef(0);
   const analysisTimerRef = useRef<number | null>(null);
-  const triggerCaptureRef = useRef<() => void>(() => {});
+  const triggerCaptureRef = useRef<(source?: "manual" | "auto") => void>(() => {});
   const streamReadyAtRef = useRef(0);
   const readyHoldStartedAtRef = useRef<number | null>(null);
   const autoCaptureLockedRef = useRef(false);
+  const captureInFlightRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("live");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -159,6 +160,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     stableCountRef.current = 0;
     readyHoldStartedAtRef.current = null;
     autoCaptureLockedRef.current = false;
+    captureInFlightRef.current = false;
     setStreamReady(false);
     setStableCount(0);
     setSharpness(0);
@@ -195,6 +197,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const enterPreview = useCallback(
     (file: File) => {
       stopAnalysis();
+      captureInFlightRef.current = false;
       setCapturedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
       phaseRef.current = "preview";
@@ -205,17 +208,35 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     [stopAnalysis],
   );
 
-  const triggerCapture = useCallback(async () => {
-    if (phaseRef.current !== "live" || autoCaptureLockedRef.current) return;
+  const triggerCapture = useCallback(async (source: "manual" | "auto" = "auto") => {
+    if (phaseRef.current !== "live") return;
+    // Auto must wait for the lock; manual can take over as long as a snap is not mid-flight.
+    if (captureInFlightRef.current) return;
+    if (source === "auto" && autoCaptureLockedRef.current) return;
+
+    // Manual shutter cancels an in-progress auto hold and captures immediately.
+    if (source === "manual") {
+      readyHoldStartedAtRef.current = null;
+      stableCountRef.current = 0;
+      setStableCount(0);
+    }
+
+    captureInFlightRef.current = true;
     autoCaptureLockedRef.current = true;
     setIsCapturing(true);
 
     const video = getVideo();
     const stream = getStreamFromVideo(video);
-    let focused = false;
+    const AUTOFOCUS_TIMEOUT_MS = 2000;
     try {
       setCaptureHint("Focusing… hold steady");
-      focused = await triggerCameraAutofocus(stream);
+      const focusPromise = triggerCameraAutofocus(stream);
+      const focused = await Promise.race([
+        focusPromise,
+        new Promise<boolean>((resolve) => {
+          window.setTimeout(() => resolve(false), AUTOFOCUS_TIMEOUT_MS);
+        }),
+      ]);
       if (!focused) {
         setCaptureHint("Hold the camera steady…");
         await new Promise((r) => window.setTimeout(r, NO_FOCUS_SETTLE_MS));
@@ -228,8 +249,10 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     }
 
     const file = await snapFrame();
-    if (file) enterPreview(file);
-    else {
+    if (file) {
+      enterPreview(file);
+    } else {
+      captureInFlightRef.current = false;
       autoCaptureLockedRef.current = false;
       setIsCapturing(false);
       setCaptureHint(null);
@@ -287,7 +310,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
           setAlignmentStatus("ready");
         } else if (Date.now() - readyHoldStartedAtRef.current >= AUTO_CAPTURE_HOLD_MS) {
           setAlignmentStatus("ready");
-          triggerCaptureRef.current();
+          triggerCaptureRef.current("auto");
         }
       }
     }, 450);
@@ -405,7 +428,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const statusCopy = STATUS_COPY[alignmentStatus];
   const alignmentProgress = getAlignmentProgress(sharpness, stableCount, cardScore);
   const cardDetected = cardScore >= CARD_DETECT_MIN_SCORE * 0.65;
-  const canManualCapture = streamReady && !isStarting && !error && !isCapturing;
+  const canManualCapture = streamReady && !isStarting && !error && !isCapturing && phase === "live";
 
   const videoConstraints = buildWebcamVideoConstraints(facingMode, constraintTier);
   const cameraLabel = facingMode === "environment" ? "Back camera" : "Front camera";
@@ -574,7 +597,11 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                   <div className="flex justify-center">
                     <button
                       type="button"
-                      onClick={() => void triggerCapture()}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void triggerCapture("manual");
+                      }}
                       disabled={!canManualCapture}
                       className={cn(
                         "relative flex h-[76px] w-[76px] items-center justify-center rounded-full transition-all",

@@ -20,6 +20,9 @@ export type DirectoryContact = {
   title: string;
   email: string;
   phone: string;
+  /** Dial code only, e.g. "+91". */
+  countryCode?: string;
+  countryName?: string;
   eventName?: string;
   notes?: string;
   status: ContactStatus;
@@ -243,6 +246,8 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
           title: String(c.title || c.designation || ""),
           email: String(c.email || ""),
           phone: String(c.phone || ""),
+          countryCode: String(c.countryCode || ""),
+          countryName: String(c.countryName || ""),
           eventName: resolveEventNameForContact({
             eventName: String(c.eventName || ""),
             email: String(c.email || ""),
@@ -303,6 +308,8 @@ async function fetchContactsFromPostgres(): Promise<ContactsDirectorySnapshot> {
           title: c.title || c.designation || "No Title",
           email: c.email || "",
           phone: c.phone || "",
+          countryCode: String(c.countryCode || ""),
+          countryName: String(c.countryName || ""),
           eventName: resolveEventNameForContact({
             eventName: String(c.eventName || ""),
             email: String(c.email || ""),

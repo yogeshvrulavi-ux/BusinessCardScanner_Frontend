@@ -60,6 +60,8 @@ export function mapRawContact(c: Record<string, unknown>, index = 0): DirectoryC
       title: String(c.title || c.designation || ""),
       email: String(c.email || ""),
       phone: String(c.phone || ""),
+      countryCode: String(c.countryCode || ""),
+      countryName: String(c.countryName || ""),
       eventName: resolveEventNameForContact({
         eventName: String(c.eventName || ""),
         email: String(c.email || ""),

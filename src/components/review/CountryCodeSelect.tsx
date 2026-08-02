@@ -19,6 +19,8 @@ type CountryCodeSelectProps = {
   onChange: (countryCode: string, countryName: string) => void;
   disabled?: boolean;
   error?: string;
+  label?: string;
+  className?: string;
 };
 
 export function CountryCodeSelect({
@@ -26,6 +28,8 @@ export function CountryCodeSelect({
   onChange,
   disabled = false,
   error,
+  label = "Country",
+  className,
 }: CountryCodeSelectProps) {
   const [open, setOpen] = useState(false);
   const selected = useMemo(
@@ -34,8 +38,8 @@ export function CountryCodeSelect({
   );
 
   return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium text-foreground">Country</Label>
+    <div className={cn("space-y-1.5", className)}>
+      <Label className="text-sm font-medium text-foreground">{label}</Label>
       <Popover open={open} onOpenChange={setOpen}>
         <div className="relative">
           <PopoverTrigger asChild>

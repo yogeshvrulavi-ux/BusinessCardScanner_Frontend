@@ -29,7 +29,12 @@ export type LocalContact = {
 function payloadToLocalBody(
   payload: LeadPayload,
   cardImageBase64?: string,
-  options?: { connectionMode?: "online" | "offline"; skipWhatsApp?: boolean; skipEmail?: boolean },
+  options?: {
+    connectionMode?: "online" | "offline";
+    skipWhatsApp?: boolean;
+    skipEmail?: boolean;
+    contactId?: string;
+  },
 ) {
   return {
     fullName: payload.fullName,
@@ -58,6 +63,7 @@ function payloadToLocalBody(
     connectionMode: options?.connectionMode ?? getConnectionMode(),
     skipWhatsApp: Boolean(options?.skipWhatsApp),
     skipEmail: Boolean(options?.skipEmail),
+    contactId: options?.contactId || undefined,
     ocrEngine: payload.ocrEngine || "",
     ocrConfidence: payload.ocrConfidence ?? null,
     captureSource: payload.captureSource || "",
@@ -285,6 +291,17 @@ export async function getLocalContactById(contactId: string): Promise<LocalConta
   return response.json() as Promise<LocalContact>;
 }
 
+/** Full contact row as returned by GET /api/contacts/{id} (for merge-safe updates). */
+export async function getLocalContactRaw(
+  contactId: string,
+): Promise<Record<string, unknown>> {
+  const response = await apiFetch(`${API}/api/contacts/${contactId}`);
+  if (!response.ok) {
+    throw new Error(`Contact not found (${response.status})`);
+  }
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
 export type ThankYouOutreachResult = {
   email_sent?: boolean;
   email_error?: string | null;
@@ -301,6 +318,8 @@ export async function sendThankYouOutreach(
     connectionMode?: "online" | "offline";
     skipWhatsApp?: boolean;
     skipEmail?: boolean;
+    /** When set, backend loads the stored contact and persists delivery status. */
+    contactId?: string;
   },
 ): Promise<ThankYouOutreachResult> {
   const response = await apiFetch(`${API}/api/outreach/thank-you`, {
@@ -311,6 +330,7 @@ export async function sendThankYouOutreach(
         connectionMode: options?.connectionMode ?? getConnectionMode(),
         skipWhatsApp: Boolean(options?.skipWhatsApp),
         skipEmail: Boolean(options?.skipEmail),
+        contactId: options?.contactId,
       }),
     ),
   });
