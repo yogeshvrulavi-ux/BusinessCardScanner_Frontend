@@ -25,6 +25,8 @@ export type UserSettings = {
 };
 
 const STORAGE_KEY = "cs-user-settings";
+/** Re-enable thank-you email after SES cutover (older builds forced email off in localStorage). */
+const EMAIL_OUTREACH_REENABLE_KEY = "cs-email-outreach-reenable-ses-v1";
 /** One-time cleanup of old placeholder profile values ("Workspace owner" etc.). */
 const PROFILE_PLACEHOLDERS_MIGRATION_KEY = "cs-profile-placeholders-cleared-v1";
 /** Old defaults that were silently saved as if the user had typed them. */
@@ -73,6 +75,7 @@ export function loadUserSettings(): UserSettings {
     if (!raw) {
       // No stored prefs — WhatsApp + Email default ON for new / first-visit users.
       localStorage.setItem(PROFILE_PLACEHOLDERS_MIGRATION_KEY, "1");
+      localStorage.setItem(EMAIL_OUTREACH_REENABLE_KEY, "1");
       return { ...DEFAULT_USER_SETTINGS };
     }
     const parsed = JSON.parse(raw) as Partial<UserSettings>;
@@ -91,8 +94,9 @@ export function loadUserSettings(): UserSettings {
       DEFAULT_USER_SETTINGS.autoSyncQueueWhenOnline;
 
     // Merge defaults first so missing keys (incl. WhatsApp/Email) stay ON.
-    // Explicitly saved false continues to win via ...parsed.
-    return {
+    // Explicitly saved false continues to win via ...parsed — except the one-time
+    // SES re-enable below, which turns email back on after older "email off" builds.
+    const merged: UserSettings = {
       ...DEFAULT_USER_SETTINGS,
       ...parsed,
       autoSyncQueueWhenOnline,
@@ -103,6 +107,14 @@ export function loadUserSettings(): UserSettings {
         parsed.whatsappNotificationsEnabled ??
         DEFAULT_USER_SETTINGS.whatsappNotificationsEnabled,
     };
+
+    if (!localStorage.getItem(EMAIL_OUTREACH_REENABLE_KEY)) {
+      merged.emailNotificationsEnabled = true;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      localStorage.setItem(EMAIL_OUTREACH_REENABLE_KEY, "1");
+    }
+
+    return merged;
   } catch {
     return { ...DEFAULT_USER_SETTINGS };
   }
