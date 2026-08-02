@@ -32,6 +32,6 @@ export const PAGE = {
   },
   preferences: {
     title: "Preferences",
-    description: "Profile, notifications, legal policies, cookies, and device data.",
+    description: "Profile, Google Drive, notifications, legal policies, and device data.",
   },
 } as const;

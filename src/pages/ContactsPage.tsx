@@ -662,12 +662,12 @@ export function ContactsPage() {
             ) : null}
 
             {/* Desktop table */}
-            <div className="mt-5 hidden overflow-x-auto rounded-xl border border-border/60 lg:block">
+            <div className="mt-5 hidden max-h-[min(70vh,720px)] overflow-auto rounded-xl border border-border/60 lg:block">
               <table className="w-full text-sm">
-                <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
+                <thead className="sticky top-0 z-10 bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white shadow-sm">
                   <tr>
                     {canDelete && (
-                      <th className="w-10 px-3 py-3">
+                      <th className="w-10 px-3 py-3.5">
                         <Checkbox
                           checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
                           onCheckedChange={(value) => toggleSelectAllVisible(value === true)}
@@ -676,35 +676,46 @@ export function ContactsPage() {
                         />
                       </th>
                     )}
-                    <th className="px-4 py-3 font-bold text-white">Contact Name</th>
-                    <th className="px-4 py-3 font-bold text-white">Card</th>
-                    <th className="px-4 py-3 font-bold text-white">Company</th>
-                    <th className="px-4 py-3 font-bold text-white">Designation</th>
-                    <th className="px-4 py-3 font-bold text-white">Email</th>
-                    <th className="px-4 py-3 font-bold text-white">Phone</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Contact Name</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Card</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Company</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Designation</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Email</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Phone</th>
                     {isSuperAdmin && (
                       <>
-                        <th className="px-4 py-3 font-bold text-white">Admin Name</th>
-                        <th className="px-4 py-3 font-bold text-white">Captured By</th>
+                        <th className="px-4 py-3.5 font-bold text-white">Admin Name</th>
+                        <th className="px-4 py-3.5 font-bold text-white">Captured By</th>
                       </>
                     )}
-                    {isAdmin && <th className="px-4 py-3 font-bold text-white">Captured By</th>}
-                    <th className="px-4 py-3 font-bold text-white">Event</th>
-                    <th className="px-4 py-3 font-bold text-white">WhatsApp / Email</th>
-                    <th className="px-4 py-3 font-bold text-white">Status</th>
-                    <th className="px-4 py-3 font-bold text-white">Created</th>
-                    <th className="px-4 py-3 font-bold text-white text-right">Actions</th>
+                    {isAdmin && <th className="px-4 py-3.5 font-bold text-white">Captured By</th>}
+                    <th className="px-4 py-3.5 font-bold text-white">Event</th>
+                    <th className="min-w-[168px] px-4 py-3.5 font-bold text-white">WhatsApp / Email</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Status</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Created</th>
+                    <th className="sticky right-0 bg-gradient-primary px-4 py-3.5 text-right font-bold text-white">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/60">
+                <tbody className="divide-y divide-border/60 bg-card">
                   {filtered.map((c) => {
                     const rowKey = contactRowKey(c);
                     const isHighlighted = highlight === rowKey;
                     const isSelected = selectedKeys.has(rowKey);
                     return (
-                    <tr key={rowKey} id={`contact-row-${rowKey}`} className={cn("transition", isHighlighted ? "bg-primary/10 ring-2 ring-inset ring-primary/35" : isSelected ? "bg-muted/40" : "hover:bg-muted/30")}>
+                    <tr
+                      key={rowKey}
+                      id={`contact-row-${rowKey}`}
+                      className={cn(
+                        "transition-colors",
+                        isHighlighted
+                          ? "bg-primary/10 ring-2 ring-inset ring-primary/35"
+                          : isSelected
+                            ? "bg-muted/40"
+                            : "hover:bg-muted/25",
+                      )}
+                    >
                       {canDelete && (
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-4 align-middle">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={(value) => toggleSelectContact(c, value === true)}
@@ -712,16 +723,16 @@ export function ContactsPage() {
                           />
                         </td>
                       )}
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4 align-middle">
                         <div className="flex items-center gap-3">
                           <InitialsAvatar initials={c.initials} accent={c.accent} />
                           <div>
-                            <div className="font-medium">{c.name || "\u2014"}</div>
-                            {c.notes && <div className="max-w-[200px] truncate text-[11px] text-muted-foreground">{c.notes}</div>}
+                            <div className="font-medium leading-snug">{c.name || "\u2014"}</div>
+                            {c.notes && <div className="mt-0.5 max-w-[200px] truncate text-[11px] text-muted-foreground">{c.notes}</div>}
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4 align-middle">
                         <CardImageCell
                           contactId={c.id}
                           hasCardImage={c.hasCardImage}
@@ -730,21 +741,21 @@ export function ContactsPage() {
                           capturedBy={c.user_name}
                         />
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.company || "\u2014"}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.title || "\u2014"}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.email || "\u2014"}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.phone || "\u2014"}</td>
+                      <td className="px-4 py-4 align-middle text-muted-foreground">{c.company || "\u2014"}</td>
+                      <td className="px-4 py-4 align-middle text-muted-foreground">{c.title || "\u2014"}</td>
+                      <td className="px-4 py-4 align-middle text-muted-foreground">{c.email || "\u2014"}</td>
+                      <td className="px-4 py-4 align-middle text-muted-foreground">{c.phone || "\u2014"}</td>
                       {isSuperAdmin && (
                         <>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">{c.admin_name || "\u2014"}</td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
+                          <td className="px-4 py-4 align-middle text-xs text-muted-foreground">{c.admin_name || "\u2014"}</td>
+                          <td className="px-4 py-4 align-middle text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
                         </>
                       )}
                       {isAdmin && (
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
+                        <td className="px-4 py-4 align-middle text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
                       )}
-                      <td className="px-4 py-3 text-muted-foreground">{c.eventName || "\u2014"}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4 align-middle text-muted-foreground">{c.eventName || "\u2014"}</td>
+                      <td className="px-4 py-4 align-middle">
                           <ContactChannelIcons
                             phone={c.phone}
                             email={c.email}
@@ -755,9 +766,9 @@ export function ContactsPage() {
                             queued={c.source === "queue"}
                           />
                         </td>
-                      <td className="px-4 py-3"><StatusPill status={c.status} /></td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(c.createdAt)}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-4 align-middle"><StatusPill status={c.status} /></td>
+                      <td className="px-4 py-4 align-middle text-xs text-muted-foreground">{formatDate(c.createdAt)}</td>
+                      <td className="sticky right-0 bg-card px-4 py-4 text-right align-middle shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
                         <div className="flex items-center justify-end gap-1">
                           {c.source === "queue" && (
                             <Button variant="outline" size="sm" onClick={() => handleSyncQueueItem(c.id)} disabled={syncingId === c.id || isSyncingAll} className="h-8 rounded-md text-xs">

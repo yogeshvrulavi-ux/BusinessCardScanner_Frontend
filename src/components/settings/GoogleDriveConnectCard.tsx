@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, HardDrive, Loader2, Unplug } from "lucide-react";
+import { ExternalLink, HardDrive, Loader2, RefreshCw, Unplug } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { API_BASE_URL } from "@/lib/api";
 import { apiFetch } from "@/lib/apiFetch";
+import { formatLastSyncTime, readLastSyncTime } from "@/lib/syncStatus";
 import { toast } from "sonner";
 
 type GoogleDriveStatus = {
@@ -32,6 +33,20 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+function relativeConnectedAt(iso?: string | null): string {
+  if (!iso) return formatLastSyncTime(readLastSyncTime()) || "—";
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "—";
+  const diff = Date.now() - ms;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** Compact Google Drive status card for Settings. */
 export function GoogleDriveConnectCard() {
   const [status, setStatus] = useState<GoogleDriveStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -127,102 +142,113 @@ export function GoogleDriveConnectCard() {
   };
 
   const connected = Boolean(status?.connected);
-  const sheetUrl = status?.sheet_url;
-  const lastDriveSync = status?.connected_at
-    ? new Date(status.connected_at).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "—";
-
-  const connectionLabel =
-    status?.oauth_configured === false
-      ? "Not configured"
-      : connected
-        ? "Connected"
-        : "Not Connected";
 
   return (
-    <Card className="flex h-full flex-col rounded-2xl border-border/60 p-6 shadow-soft">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <HardDrive className="h-4 w-4 text-primary" /> Google Drive
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Connect your Google account once. Your company contacts sheet is created in{" "}
-        <strong>your</strong> Drive (free), then Users can view it and the app can sync rows.
-      </p>
-
-      {loading ? (
-        <div className="mt-5 flex flex-1 items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Checking connection…
-        </div>
-      ) : (
-        <div className="mt-4 flex flex-1 flex-col">
-          <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-1">
-            <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2.5">
-              <span className="text-xs text-muted-foreground">Connection Status</span>
-              <span className="text-sm font-medium text-foreground">{connectionLabel}</span>
-            </div>
-            {connected ? (
-              <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2.5">
-                <span className="text-xs text-muted-foreground">Connected As</span>
-                <span className="max-w-[55%] truncate text-right text-sm font-medium text-foreground">
-                  {status?.google_email || "Google account"}
-                </span>
-              </div>
-            ) : null}
-            <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2.5">
-              <span className="text-xs text-muted-foreground">Last Drive Sync</span>
-              <span className="text-sm font-medium tabular-nums text-foreground">{lastDriveSync}</span>
-            </div>
-            <div className="flex items-center justify-between gap-3 py-2.5">
-              <span className="text-xs text-muted-foreground">Drive Folder</span>
-              {sheetUrl ? (
-                <a
-                  href={sheetUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex max-w-[55%] items-center gap-1 truncate text-sm font-medium text-primary hover:underline"
-                >
-                  Open sheet <ExternalLink className="h-3 w-3 shrink-0" />
-                </a>
+    <Card className="rounded-2xl border-border/60 p-4 shadow-soft sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <HardDrive className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold">Google Drive</h3>
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
               ) : (
-                <span className="text-sm font-medium text-foreground">—</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    connected
+                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                      : status?.oauth_configured === false
+                        ? "bg-muted text-muted-foreground"
+                        : "bg-amber-500/15 text-amber-800 dark:text-amber-200"
+                  }`}
+                >
+                  {status?.oauth_configured === false
+                    ? "Not configured"
+                    : connected
+                      ? "Connected"
+                      : "Not connected"}
+                </span>
               )}
             </div>
-          </div>
-
-          {status?.oauth_configured === false ? (
-            <p className="mt-3 text-xs text-muted-foreground">
-              Place <code className="text-[11px]">secrets/client_secret_*.json</code> or set{" "}
-              <code className="text-[11px]">GOOGLE_OAUTH_CLIENT_ID</code> / SECRET / REDIRECT_URI,
-              then restart the backend.
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {connected
+                ? status?.google_email || "Google account"
+                : "Connect once to sync your company contacts sheet."}
             </p>
-          ) : null}
-
-          <div className="mt-auto flex flex-wrap gap-2 pt-4">
-            {!connected ? (
-              <Button type="button" disabled={busy || status?.oauth_configured === false} onClick={handleConnect}>
-                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Connect Google Drive
-              </Button>
-            ) : (
-              <>
-                <Button type="button" disabled={busy} onClick={handleEnsureSheet}>
-                  {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Create / refresh sheet
-                </Button>
-                <Button type="button" variant="outline" disabled={busy} onClick={handleDisconnect}>
-                  <Unplug className="mr-2 h-4 w-4" />
-                  Disconnect
-                </Button>
-              </>
-            )}
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Last sync · {relativeConnectedAt(status?.connected_at)}
+              {status?.sheet_url ? (
+                <>
+                  {" · "}
+                  <a
+                    href={status.sheet_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline"
+                  >
+                    Open sheet <ExternalLink className="h-3 w-3" />
+                  </a>
+                </>
+              ) : null}
+            </p>
           </div>
         </div>
-      )}
+
+        <div className="flex flex-wrap gap-2">
+          {!connected ? (
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-lg"
+              disabled={busy || status?.oauth_configured === false}
+              onClick={handleConnect}
+            >
+              {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              Connect
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="rounded-lg"
+                disabled={busy}
+                onClick={handleConnect}
+              >
+                Reconnect
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-lg"
+                disabled={busy}
+                onClick={handleEnsureSheet}
+              >
+                {busy ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Sync now
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="rounded-lg text-muted-foreground"
+                disabled={busy}
+                onClick={handleDisconnect}
+              >
+                <Unplug className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
     </Card>
   );
 }

@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 
 import { AuthGate } from "@/components/auth/AuthGate";
+import { FreemiumWelcomeModal } from "@/components/subscription/FreemiumWelcomeModal";
+import { StorageQuotaProvider } from "@/contexts/StorageQuotaContext";
 import { syncConnectionModeWithNetwork } from "@/lib/connectionMode";
 import { isAuthEnabled } from "@/lib/authConfig";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
@@ -27,7 +29,8 @@ export function AppShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isAuthRoute = pathname.startsWith("/auth");
   const isRegisterRoute = pathname.startsWith("/register");
-  const isPublicShellRoute = isAuthRoute || isRegisterRoute;
+  const isSignupRoute = pathname.startsWith("/signup");
+  const isPublicShellRoute = isAuthRoute || isRegisterRoute || isSignupRoute;
   const authRequired = isAuthEnabled;
 
   useForceLightMode(isPublicShellRoute);
@@ -145,23 +148,26 @@ export function AppShell() {
 
   const appContent = (
     <ConfirmModalProvider>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background">
-          <AppSidebar />
-          <SidebarInset className="relative flex min-h-svh flex-1 flex-col bg-transparent">
-            <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-surface" />
-            <div className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-              <InstallPrompt />
-              <TopBar />
-              <NetworkOfflineBanner />
-            </div>
-            <main className="min-h-0 flex-1 w-full max-w-full overflow-x-hidden overflow-y-auto">
-              <Outlet />
-            </main>
-          </SidebarInset>
-        </div>
-        <CookieConsentBanner />
-      </SidebarProvider>
+      <StorageQuotaProvider>
+        <FreemiumWelcomeModal />
+        <SidebarProvider>
+          <div className="flex min-h-screen w-full bg-background">
+            <AppSidebar />
+            <SidebarInset className="relative flex min-h-svh flex-1 flex-col bg-transparent">
+              <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-surface" />
+              <div className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+                <InstallPrompt />
+                <TopBar />
+                <NetworkOfflineBanner />
+              </div>
+              <main className="min-h-0 flex-1 w-full max-w-full overflow-x-hidden overflow-y-auto">
+                <Outlet />
+              </main>
+            </SidebarInset>
+          </div>
+          <CookieConsentBanner />
+        </SidebarProvider>
+      </StorageQuotaProvider>
     </ConfirmModalProvider>
   );
 

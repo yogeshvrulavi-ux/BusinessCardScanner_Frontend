@@ -5,12 +5,12 @@ import { Loader2 } from "lucide-react";
 import { useAuth, type UserRole } from "@/lib/AuthContext";
 
 function resolvePostAuthPath(role?: UserRole): string {
-  if (typeof window === "undefined") return "/scan";
+  if (typeof window === "undefined") return "/subscription";
   const redirectTo = new URLSearchParams(window.location.search).get("redirectTo");
   if (redirectTo?.startsWith("/") && !redirectTo.startsWith("/auth")) {
     return redirectTo;
   }
-  return "/scan";
+  return "/subscription";
 }
 
 type AuthGateProps = {

@@ -35,10 +35,10 @@ export function AccessDeniedPanel() {
         </p>
         <div className="mt-6 flex gap-3">
           <Link
-            to="/scan"
+            to="/subscription"
             className="h-11 rounded-md bg-gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:opacity-95"
           >
-            Go to Dashboard
+            Go to Subscription
           </Link>
           <Link
             to="/auth/$pathname"

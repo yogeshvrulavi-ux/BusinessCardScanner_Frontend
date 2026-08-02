@@ -21,7 +21,6 @@ import { Switch } from "@/components/ui/switch";
 import { PageShell } from "@/components/layout/PageShell";
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { GoogleDriveConnectCard } from "@/components/settings/GoogleDriveConnectCard";
-import { StorageUsageCard } from "@/components/settings/StorageUsageCard";
 import { PAGE } from "@/constants/navigation";
 import {
   COOKIE_POLICY_SECTIONS,
@@ -207,16 +206,7 @@ export function SettingsPage() {
           onSave={handleSaveProfile}
         />
 
-        <div
-          className={
-            showGoogleDrive
-              ? "grid grid-cols-1 items-stretch gap-5 md:grid-cols-2"
-              : "grid grid-cols-1 items-stretch gap-5"
-          }
-        >
-          {showGoogleDrive ? <GoogleDriveConnectCard /> : null}
-          <StorageUsageCard />
-        </div>
+        {showGoogleDrive ? <GoogleDriveConnectCard /> : null}
 
         <Card className="flex flex-col rounded-2xl border-border/60 p-6 shadow-soft">
           <div className="flex items-center gap-2 text-sm font-medium">
