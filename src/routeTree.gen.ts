@@ -10,7 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsersRouteImport } from './routes/users'
+import { Route as SubscriptionRouteImport } from './routes/subscription'
 import { Route as StatusRouteImport } from './routes/status'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ScanRouteImport } from './routes/scan'
 import { Route as ReviewRouteImport } from './routes/review'
@@ -23,6 +25,9 @@ import { Route as ContactsRouteImport } from './routes/contacts'
 import { Route as CompaniesRouteImport } from './routes/companies'
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SignupUserRouteImport } from './routes/signup.user'
+import { Route as SignupSuperAdminRouteImport } from './routes/signup.super-admin'
+import { Route as SignupAdminRouteImport } from './routes/signup.admin'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
 
 const UsersRoute = UsersRouteImport.update({
@@ -30,9 +35,19 @@ const UsersRoute = UsersRouteImport.update({
   path: '/users',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SubscriptionRoute = SubscriptionRouteImport.update({
+  id: '/subscription',
+  path: '/subscription',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StatusRoute = StatusRouteImport.update({
   id: '/status',
   path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -95,6 +110,21 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignupUserRoute = SignupUserRouteImport.update({
+  id: '/user',
+  path: '/user',
+  getParentRoute: () => SignupRoute,
+} as any)
+const SignupSuperAdminRoute = SignupSuperAdminRouteImport.update({
+  id: '/super-admin',
+  path: '/super-admin',
+  getParentRoute: () => SignupRoute,
+} as any)
+const SignupAdminRoute = SignupAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => SignupRoute,
+} as any)
 const AuthPathnameRoute = AuthPathnameRouteImport.update({
   id: '/auth/$pathname',
   path: '/auth/$pathname',
@@ -114,9 +144,14 @@ export interface FileRoutesByFullPath {
   '/review': typeof ReviewRoute
   '/scan': typeof ScanRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRouteWithChildren
   '/status': typeof StatusRoute
+  '/subscription': typeof SubscriptionRoute
   '/users': typeof UsersRoute
   '/auth/$pathname': typeof AuthPathnameRoute
+  '/signup/admin': typeof SignupAdminRoute
+  '/signup/super-admin': typeof SignupSuperAdminRoute
+  '/signup/user': typeof SignupUserRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -131,9 +166,14 @@ export interface FileRoutesByTo {
   '/review': typeof ReviewRoute
   '/scan': typeof ScanRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRouteWithChildren
   '/status': typeof StatusRoute
+  '/subscription': typeof SubscriptionRoute
   '/users': typeof UsersRoute
   '/auth/$pathname': typeof AuthPathnameRoute
+  '/signup/admin': typeof SignupAdminRoute
+  '/signup/super-admin': typeof SignupSuperAdminRoute
+  '/signup/user': typeof SignupUserRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -149,9 +189,14 @@ export interface FileRoutesById {
   '/review': typeof ReviewRoute
   '/scan': typeof ScanRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRouteWithChildren
   '/status': typeof StatusRoute
+  '/subscription': typeof SubscriptionRoute
   '/users': typeof UsersRoute
   '/auth/$pathname': typeof AuthPathnameRoute
+  '/signup/admin': typeof SignupAdminRoute
+  '/signup/super-admin': typeof SignupSuperAdminRoute
+  '/signup/user': typeof SignupUserRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -168,9 +213,14 @@ export interface FileRouteTypes {
     | '/review'
     | '/scan'
     | '/settings'
+    | '/signup'
     | '/status'
+    | '/subscription'
     | '/users'
     | '/auth/$pathname'
+    | '/signup/admin'
+    | '/signup/super-admin'
+    | '/signup/user'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -185,9 +235,14 @@ export interface FileRouteTypes {
     | '/review'
     | '/scan'
     | '/settings'
+    | '/signup'
     | '/status'
+    | '/subscription'
     | '/users'
     | '/auth/$pathname'
+    | '/signup/admin'
+    | '/signup/super-admin'
+    | '/signup/user'
   id:
     | '__root__'
     | '/'
@@ -202,9 +257,14 @@ export interface FileRouteTypes {
     | '/review'
     | '/scan'
     | '/settings'
+    | '/signup'
     | '/status'
+    | '/subscription'
     | '/users'
     | '/auth/$pathname'
+    | '/signup/admin'
+    | '/signup/super-admin'
+    | '/signup/user'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -220,7 +280,9 @@ export interface RootRouteChildren {
   ReviewRoute: typeof ReviewRoute
   ScanRoute: typeof ScanRoute
   SettingsRoute: typeof SettingsRoute
+  SignupRoute: typeof SignupRouteWithChildren
   StatusRoute: typeof StatusRoute
+  SubscriptionRoute: typeof SubscriptionRoute
   UsersRoute: typeof UsersRoute
   AuthPathnameRoute: typeof AuthPathnameRoute
 }
@@ -234,11 +296,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UsersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/subscription': {
+      id: '/subscription'
+      path: '/subscription'
+      fullPath: '/subscription'
+      preLoaderRoute: typeof SubscriptionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/status': {
       id: '/status'
       path: '/status'
       fullPath: '/status'
       preLoaderRoute: typeof StatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -325,6 +401,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/signup/user': {
+      id: '/signup/user'
+      path: '/user'
+      fullPath: '/signup/user'
+      preLoaderRoute: typeof SignupUserRouteImport
+      parentRoute: typeof SignupRoute
+    }
+    '/signup/super-admin': {
+      id: '/signup/super-admin'
+      path: '/super-admin'
+      fullPath: '/signup/super-admin'
+      preLoaderRoute: typeof SignupSuperAdminRouteImport
+      parentRoute: typeof SignupRoute
+    }
+    '/signup/admin': {
+      id: '/signup/admin'
+      path: '/admin'
+      fullPath: '/signup/admin'
+      preLoaderRoute: typeof SignupAdminRouteImport
+      parentRoute: typeof SignupRoute
+    }
     '/auth/$pathname': {
       id: '/auth/$pathname'
       path: '/auth/$pathname'
@@ -334,6 +431,21 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface SignupRouteChildren {
+  SignupAdminRoute: typeof SignupAdminRoute
+  SignupSuperAdminRoute: typeof SignupSuperAdminRoute
+  SignupUserRoute: typeof SignupUserRoute
+}
+
+const SignupRouteChildren: SignupRouteChildren = {
+  SignupAdminRoute: SignupAdminRoute,
+  SignupSuperAdminRoute: SignupSuperAdminRoute,
+  SignupUserRoute: SignupUserRoute,
+}
+
+const SignupRouteWithChildren =
+  SignupRoute._addFileChildren(SignupRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -348,7 +460,9 @@ const rootRouteChildren: RootRouteChildren = {
   ReviewRoute: ReviewRoute,
   ScanRoute: ScanRoute,
   SettingsRoute: SettingsRoute,
+  SignupRoute: SignupRouteWithChildren,
   StatusRoute: StatusRoute,
+  SubscriptionRoute: SubscriptionRoute,
   UsersRoute: UsersRoute,
   AuthPathnameRoute: AuthPathnameRoute,
 }

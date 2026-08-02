@@ -125,17 +125,38 @@ async function apiLogin(identifier: string, password: string): Promise<LoginResp
 }
 
 async function apiRefreshToken(refreshToken: string): Promise<TokenPair> {
-  const res = await fetch(authUrl("/api/auth/refresh"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(authUrl("/api/auth/refresh"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  } catch (err) {
+    const networkErr = err instanceof Error ? err : new Error("Network error");
+    (networkErr as Error & { isNetworkError?: boolean }).isNetworkError = true;
+    throw networkErr;
+  }
 
   if (!res.ok) {
-    throw new Error("Refresh failed");
+    const authErr = new Error("Refresh failed");
+    (authErr as Error & { isAuthError?: boolean }).isAuthError = true;
+    throw authErr;
   }
 
   return res.json();
+}
+
+function isLikelyNetworkAuthFailure(err: unknown): boolean {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+  if (!err || typeof err !== "object") return false;
+  const e = err as Error & { isNetworkError?: boolean; isAuthError?: boolean };
+  if (e.isAuthError) return false;
+  if (e.isNetworkError) return true;
+  if (e instanceof TypeError) return true;
+  return /failed to fetch|networkerror|name not resolved|err_internet|err_name_not_resolved|load failed/i.test(
+    e.message || "",
+  );
 }
 
 async function apiLogout(refreshToken: string, accessToken?: string | null): Promise<void> {
@@ -227,8 +248,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isRefreshing: false,
         }));
         return tokens.access_token;
-      } catch {
-        // Refresh failed — force logout
+      } catch (err) {
+        // Offline / network blip — keep the existing session so capture & queue still work.
+        if (isLikelyNetworkAuthFailure(err)) {
+          setState((s) => ({ ...s, isRefreshing: false }));
+          return accessTokenRef.current;
+        }
+        // Refresh rejected by server — force logout
         clearStoredAuth();
         accessTokenRef.current = null;
         refreshTokenRef.current = null;
@@ -359,7 +385,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Re-fetch profile to get latest user info
         const profile = await apiGetProfile(tokens.access_token);
         setAuth(profile, tokens.access_token, tokens.refresh_token);
-      } catch {
+      } catch (err) {
+        // Keep stored session when offline / unreachable so mobile offline capture works.
+        if (isLikelyNetworkAuthFailure(err) && stored.user) {
+          accessTokenRef.current = stored.access;
+          refreshTokenRef.current = stored.refresh;
+          setState({
+            user: stored.user,
+            accessToken: stored.access,
+            isAuthenticated: true,
+            isLoading: false,
+            isRefreshing: false,
+          });
+          return;
+        }
         // Session expired — clear and require login
         clearStoredAuth();
         accessTokenRef.current = null;

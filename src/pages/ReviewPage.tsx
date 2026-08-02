@@ -165,12 +165,19 @@ export const ReviewPage = () => {
     ocrEngine?: string;
     ocrConfidence?: number;
     captureSource?: string;
+    originalImageBytes?: number;
+    optimizedImageBytes?: number;
   }>({});
 
   const [isDragging, setIsDragging] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedScanImage, setSavedScanImage] = useState("");
+  const [imageStats, setImageStats] = useState<{
+    originalBytes?: number;
+    optimizedBytes?: number;
+    captureSource?: string;
+  }>({});
   const [cameraOpen, setCameraOpen] = useState(false);
   const [pickers, setPickers] = useState<PickerState>(emptyPickers);
   const [confidence, setConfidence] = useState<Record<string, number>>({});
@@ -272,7 +279,14 @@ export const ReviewPage = () => {
       ocrEngine: meta?.ocrEngine,
       ocrConfidence: meta?.ocrConfidence,
       captureSource: meta?.captureSource,
+      originalImageBytes: meta?.originalImageBytes,
+      optimizedImageBytes: meta?.optimizedImageBytes,
     };
+    setImageStats({
+      originalBytes: meta?.originalImageBytes,
+      optimizedBytes: meta?.optimizedImageBytes,
+      captureSource: meta?.captureSource,
+    });
   }, [applyScanData]);
 
   const handleFormChange = (name: string, value: string) => {
@@ -428,19 +442,29 @@ export const ReviewPage = () => {
         scanMetaRef.current = { ...scanMetaRef.current, captureSource };
       }
       const dataUrl = await readFileAsDataUrl(file);
-      setSavedScanImage(dataUrl);
       const result = await scanFileAndStore(
         file,
         dataUrl,
         undefined,
         captureSource,
       );
-      const { contact, ocrWarning: warning } = result;
+      // Reload optimized image + size stats from session (never keep the original).
+      const session = loadScanSession();
+      if (session.imageDataUrl) setSavedScanImage(session.imageDataUrl);
       scanMetaRef.current = {
         ...scanMetaRef.current,
         ocrEngine: result.ocrEngine,
         ocrConfidence: result.ocrConfidence,
+        originalImageBytes: session.meta?.originalImageBytes,
+        optimizedImageBytes: session.meta?.optimizedImageBytes,
+        captureSource: session.meta?.captureSource || captureSource,
       };
+      setImageStats({
+        originalBytes: session.meta?.originalImageBytes,
+        optimizedBytes: session.meta?.optimizedImageBytes,
+        captureSource: session.meta?.captureSource || captureSource,
+      });
+      const { contact, ocrWarning: warning } = result;
       applyScanData(parseScanContact(contact));
       setOcrWarning(warning ?? null);
       if (warning) {
@@ -768,11 +792,15 @@ export const ReviewPage = () => {
             <Card className="rounded-sm">
               {upload.previewUrl || savedScanImage ? (
                 <ImagePreview
-                  src={upload.previewUrl || savedScanImage}
+                  src={savedScanImage || upload.previewUrl}
                   fileName={upload.file?.name || "Scanned card"}
+                  captureSource={imageStats.captureSource}
+                  originalBytes={imageStats.originalBytes}
+                  optimizedBytes={imageStats.optimizedBytes}
                   onClear={() => {
                     upload.clear();
                     setSavedScanImage("");
+                    setImageStats({});
                     sessionStorage.removeItem("latestScanImage");
                   }}
                 />

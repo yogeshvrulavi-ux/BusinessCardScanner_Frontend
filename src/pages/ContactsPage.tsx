@@ -1,9 +1,10 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Search, Filter, RefreshCw, Plus, Trash2, Send, Loader2, Pencil, RotateCcw } from "lucide-react";
+import { Search, Filter, RefreshCw, Plus, Trash2, Send, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -20,7 +21,6 @@ import { useConfirmModal } from "@/components/ui/confirm-modal";
 import {
   syncAllQueueItems,
   syncQueueItem,
-  updateContact,
 } from "@/lib/contactStorage";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useAuth } from "@/lib/AuthContext";
@@ -30,50 +30,21 @@ import {
   invalidateContactsDirectory,
   type DirectoryContact,
 } from "@/lib/contactsDirectory";
-import { fetchContactById, fetchContactsPage } from "@/lib/contactsPageApi";
-import { getQueueItems, updateQueueItem } from "@/lib/indexeddb";
+import { fetchContactById, fetchContactsPage, mapRawContact } from "@/lib/contactsPageApi";
+import { getCachedContacts, getQueueItems } from "@/lib/indexeddb";
 import { loadEvents, resolveEventNameForContact } from "@/lib/eventStorage";
 import { contactBelongsToAppUser, getCurrentAppUser, getCurrentAppUserSync } from "@/lib/currentAppUser";
-import { getOutreachStatusForContactSync, recordOutreachFromSyncResult } from "@/lib/outreachStatusStorage";
+import { getOutreachStatusForContactSync } from "@/lib/outreachStatusStorage";
 import type { ContactStatus } from "@/lib/contactStatus";
 import { Route as ContactsRoute } from "@/routes/contacts";
 import { cn } from "@/lib/utils";
 import { ContactChannelIcons } from "@/components/contacts/ContactChannelIcons";
 import { CardImageCell } from "@/components/contacts/CardImageCell";
 import {
-  ContactEditDialog,
-  ContactResendDialog,
-  type ContactEditValues,
-  type ResendChannelChoice,
-} from "@/components/contacts/ContactActionDialogs";
-import {
-  getLocalContactRaw,
-  queueContactToPayload,
-  sendThankYouOutreach,
-  type ThankYouOutreachResult,
-} from "@/lib/localContactApi";
-import type { LeadPayload } from "@/lib/cardImage";
-import type { SyncResult } from "@/lib/contactApi";
-import { notifyOutreachAfterSync } from "@/lib/outreachFeedback";
-import {
   TABLE_PAGE_SIZE,
   TablePagination,
   clampPageAfterDelete,
 } from "@/components/ui/table-pagination";
-
-function outreachResultToSyncResult(data: ThankYouOutreachResult): SyncResult {
-  return {
-    success: true,
-    emailSent: data.email_sent === true,
-    emailAttempted: data.email_sent === true || Boolean(data.email_error),
-    emailError: data.email_error ?? null,
-    emailTo: data.email_to ?? null,
-    emailExtracted: data.email_extracted ?? null,
-    whatsappSent: data.whatsapp_sent === true,
-    whatsappAttempted: data.whatsapp_sent === true || Boolean(data.whatsapp_error),
-    whatsappError: data.whatsapp_error ?? null,
-  };
-}
 
 export type Contact = DirectoryContact;
 
@@ -110,8 +81,6 @@ async function loadQueueAsDirectoryContacts(): Promise<DirectoryContact[]> {
         title: c.title || c.designation || "No Title",
         email: c.email || "",
         phone: c.phone || "",
-        countryCode: String(c.countryCode || ""),
-        countryName: String(c.countryName || ""),
         eventName: resolveEventNameForContact({
           eventName: String(c.eventName || ""),
           email: String(c.email || ""),
@@ -186,10 +155,8 @@ export function ContactsPage() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [editContact, setEditContact] = useState<Contact | null>(null);
-  const [resendContact, setResendContact] = useState<Contact | null>(null);
-  const [postEditResendContact, setPostEditResendContact] = useState<Contact | null>(null);
-  const [actionBusy, setActionBusy] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   /** Debounce search so each keystroke does not hit Postgres. */
   const [debouncedQ, setDebouncedQ] = useState(q);
@@ -219,15 +186,8 @@ export function ContactsPage() {
   };
 
   const { settings: userSettings } = useUserSettings();
-  const showWhatsAppTemplateStatus = userSettings.whatsappNotificationsEnabled;
-  const showEmailTemplateStatus = userSettings.emailNotificationsEnabled;
-  const showTemplateStatusColumn = showWhatsAppTemplateStatus || showEmailTemplateStatus;
-  const templateColumnLabel = [
-    showWhatsAppTemplateStatus ? "WhatsApp" : null,
-    showEmailTemplateStatus ? "Email" : null,
-  ]
-    .filter(Boolean)
-    .join(" / ");
+  const whatsappEnabled = Boolean(userSettings.whatsappNotificationsEnabled);
+  const emailEnabled = Boolean(userSettings.emailNotificationsEnabled);
 
   const contactsList = useMemo(() => {
     if (page === 1) return [...queueContacts, ...dbContacts];
@@ -247,9 +207,22 @@ export function ContactsPage() {
       try {
         setError(null);
         const filters = { q: debouncedQ, event: eventFilter || undefined };
+        const queuePromise = loadQueueAsDirectoryContacts();
+
+        // Offline: keep the app usable with IndexedDB queue + local cache (no error page).
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const [queue, cached] = await Promise.all([queuePromise, getCachedContacts()]);
+          const mapped = cached.map((c, i) => mapRawContact(c as Record<string, unknown>, i));
+          setQueueContacts(queue);
+          setDbContacts(mapped);
+          setTotal(mapped.length);
+          if (!silent) setSelectedKeys(new Set());
+          return;
+        }
+
         const [pageRes, queue] = await Promise.all([
           fetchContactsPage(targetPage, TABLE_PAGE_SIZE, filters),
-          loadQueueAsDirectoryContacts(),
+          queuePromise,
         ]);
         const nextPage = clampPageAfterDelete(targetPage, pageRes.total, TABLE_PAGE_SIZE);
         if (nextPage !== targetPage) {
@@ -262,8 +235,27 @@ export function ContactsPage() {
           setTotal(pageRes.total);
         }
         setQueueContacts(queue);
+        if (!silent) setSelectedKeys(new Set());
       } catch (err: unknown) {
         console.error(err);
+        // Network failure while supposedly online — still fall back to local data.
+        try {
+          const [queue, cached] = await Promise.all([
+            loadQueueAsDirectoryContacts(),
+            getCachedContacts(),
+          ]);
+          if (queue.length > 0 || cached.length > 0) {
+            setQueueContacts(queue);
+            const mapped = cached.map((c, i) => mapRawContact(c as Record<string, unknown>, i));
+            setDbContacts(mapped);
+            setTotal(mapped.length);
+            setError(null);
+            if (!silent) setSelectedKeys(new Set());
+            return;
+          }
+        } catch {
+          /* fall through to error UI */
+        }
         setError(err instanceof Error ? err.message : "Failed to load contacts.");
         if (!silent) toast.error("Failed to load contacts.");
       } finally {
@@ -391,6 +383,11 @@ export function ContactsPage() {
     try {
       await deleteDirectoryContact(contact);
       removeContact(contact);
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(contactRowKey(contact));
+        return next;
+      });
       toast.success(contact.source === "queue" ? "Queued contact removed." : "Contact deleted.");
       void reloadContacts({ force: true, silent: true });
     } catch (err: unknown) {
@@ -399,186 +396,14 @@ export function ContactsPage() {
     }
   };
 
-  const patchContactInLists = (contact: Contact, phone: string, email: string) => {
-    const apply = (c: Contact): Contact =>
-      c.id === contact.id && c.source === contact.source
-        ? {
-            ...c,
-            phone,
-            email,
-            channels: { whatsapp: !!phone, email: !!email },
-          }
-        : c;
-    if (contact.source === "queue") {
-      setQueueContacts((prev) => prev.map(apply));
-    } else {
-      setDbContacts((prev) => prev.map(apply));
-    }
-  };
-
-  const runResendForContact = async (
-    contact: Contact,
-    choice: Exclude<ResendChannelChoice, "none">,
-  ) => {
-    const skipWhatsApp = choice === "email";
-    const skipEmail = choice === "whatsapp";
-    if (!skipWhatsApp && !contact.phone?.trim()) {
-      toast.error("This contact has no phone number for WhatsApp.");
-      return;
-    }
-    if (!skipEmail && !contact.email?.trim()) {
-      toast.error("This contact has no email address.");
-      return;
-    }
-
-    setActionBusy(true);
-    try {
-      let payload: LeadPayload = {
-        fullName: contact.name || "Contact",
-        designation: contact.title || "",
-        company: contact.company || "",
-        phone: contact.phone || "",
-        email: contact.email || "",
-        website: "",
-        address: "",
-        eventName: contact.eventName || "",
-        notes: contact.notes || "",
-      };
-
-      const contactId =
-        contact.source === "queue" ? undefined : contact.id;
-
-      if (contact.source === "queue") {
-        const items = await getQueueItems();
-        const item = items.find((qi) => qi.id === contact.id);
-        if (item) {
-          payload = queueContactToPayload(item.contact_data as Record<string, unknown>);
-          payload.phone = contact.phone || payload.phone;
-          payload.email = contact.email || payload.email;
-        }
-      } else {
-        try {
-          const raw = await getLocalContactRaw(contact.id);
-          payload = queueContactToPayload(raw);
-          payload.phone = contact.phone || payload.phone;
-          payload.email = contact.email || payload.email;
-        } catch {
-          // Fall back to directory fields if fetch fails.
-        }
-      }
-
-      const result = await sendThankYouOutreach(payload, {
-        skipWhatsApp,
-        skipEmail,
-        contactId,
-      });
-      const syncResult = outreachResultToSyncResult(result);
-      await recordOutreachFromSyncResult(
-        { email: contact.email, phone: contact.phone, name: contact.name },
-        syncResult,
-      );
-      notifyOutreachAfterSync(userSettings, syncResult);
-      if (contactId) {
-        window.dispatchEvent(
-          new CustomEvent("cs-contacts-updated", { detail: { contactId } }),
-        );
-      } else {
-        void reloadContacts({ silent: true });
-      }
-    } catch (err: unknown) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : "Failed to resend contact details.");
-    } finally {
-      setActionBusy(false);
-      setResendContact(null);
-      setPostEditResendContact(null);
-    }
-  };
-
-  const handleSaveEdit = async (values: ContactEditValues) => {
-    if (!editContact) return;
-    setActionBusy(true);
-    try {
-      if (editContact.source === "queue") {
-        const items = await getQueueItems();
-        const item = items.find((qi) => qi.id === editContact.id);
-        if (!item) {
-          toast.error("Queued contact not found.");
-          return;
-        }
-        await updateQueueItem({
-          ...item,
-          contact_data: {
-            ...item.contact_data,
-            phone: values.phone,
-            countryCode: values.countryCode,
-            countryName: values.countryName,
-            email: values.email,
-            emailAddress: values.email,
-          },
-        });
-        window.dispatchEvent(new CustomEvent("cs-queue-updated"));
-      } else {
-        const raw = await getLocalContactRaw(editContact.id);
-        const payload = queueContactToPayload(raw);
-        payload.phone = values.phone;
-        payload.countryCode = values.countryCode;
-        payload.countryName = values.countryName;
-        payload.email = values.email;
-        await updateContact(editContact.id, payload);
-        window.dispatchEvent(
-          new CustomEvent("cs-contacts-updated", {
-            detail: { contactId: editContact.id },
-          }),
-        );
-      }
-
-      const updated: Contact = {
-        ...editContact,
-        phone: values.phone,
-        email: values.email,
-        countryCode: values.countryCode,
-        countryName: values.countryName,
-        channels: { whatsapp: !!values.phone, email: !!values.email },
-      };
-      patchContactInLists(editContact, values.phone, values.email);
-      setDbContacts((prev) =>
-        prev.map((c) =>
-          c.id === editContact.id && c.source === editContact.source
-            ? {
-                ...c,
-                phone: values.phone,
-                email: values.email,
-                countryCode: values.countryCode,
-                countryName: values.countryName,
-                channels: { whatsapp: !!values.phone, email: !!values.email },
-              }
-            : c,
-        ),
-      );
-      setQueueContacts((prev) =>
-        prev.map((c) =>
-          c.id === editContact.id && c.source === editContact.source
-            ? {
-                ...c,
-                phone: values.phone,
-                email: values.email,
-                countryCode: values.countryCode,
-                countryName: values.countryName,
-                channels: { whatsapp: !!values.phone, email: !!values.email },
-              }
-            : c,
-        ),
-      );
-      toast.success("Contact updated.");
-      setEditContact(null);
-      setPostEditResendContact(updated);
-    } catch (err: unknown) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : "Failed to update contact.");
-    } finally {
-      setActionBusy(false);
-    }
+  const toggleSelectContact = (contact: Contact, checked: boolean) => {
+    const key = contactRowKey(contact);
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
   };
 
   const filtered = useMemo(() => {
@@ -602,6 +427,61 @@ export function ContactsPage() {
       return true;
     });
   }, [contactsList, tab, q, eventFilter]);
+
+  const allVisibleSelected =
+    canDelete && filtered.length > 0 && filtered.every((c) => selectedKeys.has(contactRowKey(c)));
+  const someVisibleSelected =
+    canDelete && filtered.some((c) => selectedKeys.has(contactRowKey(c)));
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      for (const contact of filtered) {
+        const key = contactRowKey(contact);
+        if (checked) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!canDelete || selectedKeys.size === 0) return;
+    const selected = filtered.filter((c) => selectedKeys.has(contactRowKey(c)));
+    if (selected.length === 0) return;
+
+    const count = selected.length;
+    const ok = await confirm({
+      title: `Delete ${count} selected contact${count === 1 ? "" : "s"}?`,
+      description: "This action cannot be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setIsBulkDeleting(true);
+    let deleted = 0;
+    try {
+      for (const contact of selected) {
+        try {
+          await deleteDirectoryContact(contact);
+          removeContact(contact);
+          deleted += 1;
+        } catch (err) {
+          console.error(err);
+        }
+      }
+      setSelectedKeys(new Set());
+      if (deleted > 0) {
+        toast.success(`${deleted} contact${deleted === 1 ? "" : "s"} deleted successfully.`);
+        void reloadContacts({ force: true, silent: true });
+      } else {
+        toast.error("Could not delete the selected contacts.");
+      }
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
 
   const eventFilterOptions = useMemo(() => {
     const names = new Set<string>();
@@ -684,6 +564,22 @@ export function ContactsPage() {
               </span>
             ) : null}
           </Button>
+          {canDelete && (
+            <Button
+              variant="outline"
+              onClick={() => void handleBulkDelete()}
+              disabled={selectedKeys.size === 0 || isBulkDeleting}
+              className="w-full sm:w-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              {isBulkDeleting ? (
+                <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4 shrink-0" />
+              )}
+              Delete Selected
+              {selectedKeys.size > 0 ? ` (${selectedKeys.size})` : ""}
+            </Button>
+          )}
           <Button
             onClick={() => void navigate({ to: "/scan" })}
             className="w-full sm:w-auto"
@@ -766,46 +662,77 @@ export function ContactsPage() {
             ) : null}
 
             {/* Desktop table */}
-            <div className="mt-5 hidden overflow-x-auto rounded-xl border border-border/60 lg:block">
+            <div className="mt-5 hidden max-h-[min(70vh,720px)] overflow-auto rounded-xl border border-border/60 lg:block">
               <table className="w-full text-sm">
-                <thead className="bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white">
+                <thead className="sticky top-0 z-10 bg-gradient-primary text-left text-[11px] font-bold uppercase tracking-wider text-white shadow-sm">
                   <tr>
-                    <th className="px-4 py-3 font-bold text-white">Contact Name</th>
-                    <th className="px-4 py-3 font-bold text-white">Card</th>
-                    <th className="px-4 py-3 font-bold text-white">Company</th>
-                    <th className="px-4 py-3 font-bold text-white">Designation</th>
-                    <th className="px-4 py-3 font-bold text-white">Email</th>
-                    <th className="px-4 py-3 font-bold text-white">Phone</th>
+                    {canDelete && (
+                      <th className="w-10 px-3 py-3.5">
+                        <Checkbox
+                          checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                          onCheckedChange={(value) => toggleSelectAllVisible(value === true)}
+                          aria-label="Select all contacts"
+                          className="border-white data-[state=checked]:bg-white data-[state=checked]:text-primary data-[state=indeterminate]:bg-white data-[state=indeterminate]:text-primary"
+                        />
+                      </th>
+                    )}
+                    <th className="px-4 py-3.5 font-bold text-white">Contact Name</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Card</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Company</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Designation</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Email</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Phone</th>
                     {isSuperAdmin && (
                       <>
-                        <th className="px-4 py-3 font-bold text-white">Admin Name</th>
-                        <th className="px-4 py-3 font-bold text-white">Captured By</th>
+                        <th className="px-4 py-3.5 font-bold text-white">Admin Name</th>
+                        <th className="px-4 py-3.5 font-bold text-white">Captured By</th>
                       </>
                     )}
-                    {isAdmin && <th className="px-4 py-3 font-bold text-white">Captured By</th>}
-                    <th className="px-4 py-3 font-bold text-white">Event</th>
-                    {showTemplateStatusColumn && <th className="px-4 py-3 font-bold text-white">{templateColumnLabel}</th>}
-                    <th className="px-4 py-3 font-bold text-white">Status</th>
-                    <th className="px-4 py-3 font-bold text-white">Created</th>
-                    <th className="px-4 py-3 font-bold text-white text-right">Actions</th>
+                    {isAdmin && <th className="px-4 py-3.5 font-bold text-white">Captured By</th>}
+                    <th className="px-4 py-3.5 font-bold text-white">Event</th>
+                    <th className="min-w-[168px] px-4 py-3.5 font-bold text-white">WhatsApp / Email</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Status</th>
+                    <th className="px-4 py-3.5 font-bold text-white">Created</th>
+                    <th className="sticky right-0 bg-gradient-primary px-4 py-3.5 text-right font-bold text-white">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/60">
+                <tbody className="divide-y divide-border/60 bg-card">
                   {filtered.map((c) => {
                     const rowKey = contactRowKey(c);
                     const isHighlighted = highlight === rowKey;
+                    const isSelected = selectedKeys.has(rowKey);
                     return (
-                    <tr key={rowKey} id={`contact-row-${rowKey}`} className={cn("transition", isHighlighted ? "bg-primary/10 ring-2 ring-inset ring-primary/35" : "hover:bg-muted/30")}>
-                      <td className="px-4 py-3">
+                    <tr
+                      key={rowKey}
+                      id={`contact-row-${rowKey}`}
+                      className={cn(
+                        "transition-colors",
+                        isHighlighted
+                          ? "bg-primary/10 ring-2 ring-inset ring-primary/35"
+                          : isSelected
+                            ? "bg-muted/40"
+                            : "hover:bg-muted/25",
+                      )}
+                    >
+                      {canDelete && (
+                        <td className="px-3 py-4 align-middle">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(value) => toggleSelectContact(c, value === true)}
+                            aria-label={`Select ${c.name || "contact"}`}
+                          />
+                        </td>
+                      )}
+                      <td className="px-4 py-4 align-middle">
                         <div className="flex items-center gap-3">
                           <InitialsAvatar initials={c.initials} accent={c.accent} />
                           <div>
-                            <div className="font-medium">{c.name || "\u2014"}</div>
-                            {c.notes && <div className="max-w-[200px] truncate text-[11px] text-muted-foreground">{c.notes}</div>}
+                            <div className="font-medium leading-snug">{c.name || "\u2014"}</div>
+                            {c.notes && <div className="mt-0.5 max-w-[200px] truncate text-[11px] text-muted-foreground">{c.notes}</div>}
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4 align-middle">
                         <CardImageCell
                           contactId={c.id}
                           hasCardImage={c.hasCardImage}
@@ -814,56 +741,40 @@ export function ContactsPage() {
                           capturedBy={c.user_name}
                         />
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.company || "\u2014"}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.title || "\u2014"}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.email || "\u2014"}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.phone || "\u2014"}</td>
+                      <td className="px-4 py-4 align-middle text-muted-foreground">{c.company || "\u2014"}</td>
+                      <td className="px-4 py-4 align-middle text-muted-foreground">{c.title || "\u2014"}</td>
+                      <td className="px-4 py-4 align-middle text-muted-foreground">{c.email || "\u2014"}</td>
+                      <td className="px-4 py-4 align-middle text-muted-foreground">{c.phone || "\u2014"}</td>
                       {isSuperAdmin && (
                         <>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">{c.admin_name || "\u2014"}</td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
+                          <td className="px-4 py-4 align-middle text-xs text-muted-foreground">{c.admin_name || "\u2014"}</td>
+                          <td className="px-4 py-4 align-middle text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
                         </>
                       )}
                       {isAdmin && (
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
+                        <td className="px-4 py-4 align-middle text-xs text-muted-foreground">{c.user_name || "\u2014"}</td>
                       )}
-                      <td className="px-4 py-3 text-muted-foreground">{c.eventName || "\u2014"}</td>
-                      {showTemplateStatusColumn && (
-                        <td className="px-4 py-3">
-                          <ContactChannelIcons phone={c.phone} email={c.email} whatsappDelivery={c.whatsappDelivery} emailDelivery={c.emailDelivery} showWhatsApp={showWhatsAppTemplateStatus} showEmail={showEmailTemplateStatus} />
+                      <td className="px-4 py-4 align-middle text-muted-foreground">{c.eventName || "\u2014"}</td>
+                      <td className="px-4 py-4 align-middle">
+                          <ContactChannelIcons
+                            phone={c.phone}
+                            email={c.email}
+                            whatsappDelivery={c.whatsappDelivery}
+                            emailDelivery={c.emailDelivery}
+                            whatsappEnabled={whatsappEnabled}
+                            emailEnabled={emailEnabled}
+                            queued={c.source === "queue"}
+                          />
                         </td>
-                      )}
-                      <td className="px-4 py-3"><StatusPill status={c.status} /></td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(c.createdAt)}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-4 align-middle"><StatusPill status={c.status} /></td>
+                      <td className="px-4 py-4 align-middle text-xs text-muted-foreground">{formatDate(c.createdAt)}</td>
+                      <td className="sticky right-0 bg-card px-4 py-4 text-right align-middle shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
                         <div className="flex items-center justify-end gap-1">
                           {c.source === "queue" && (
                             <Button variant="outline" size="sm" onClick={() => handleSyncQueueItem(c.id)} disabled={syncingId === c.id || isSyncingAll} className="h-8 rounded-md text-xs">
                               {syncingId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Send className="mr-1.5 h-3 w-3" />Sync</>}
                             </Button>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setEditContact(c)}
-                            disabled={actionBusy}
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-md"
-                            aria-label="Edit contact"
-                            title="Edit"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setResendContact(c)}
-                            disabled={actionBusy || (!c.phone && !c.email)}
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-md"
-                            aria-label="Resend WhatsApp or Email"
-                            title="Resend"
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                          </Button>
                           {canDelete && (
                             <Button variant="ghost" size="icon" onClick={() => handleDelete(c)} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md cursor-pointer">
                               <Trash2 className="h-4 w-4" />
@@ -880,12 +791,31 @@ export function ContactsPage() {
 
             {/* Mobile & tablet cards */}
             <div className="mt-5 space-y-3 lg:hidden">
+              {canDelete && filtered.length > 0 && (
+                <div className="flex items-center gap-2 px-1">
+                  <Checkbox
+                    checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                    onCheckedChange={(value) => toggleSelectAllVisible(value === true)}
+                    aria-label="Select all contacts"
+                  />
+                  <span className="text-xs text-muted-foreground">Select all</span>
+                </div>
+              )}
               {filtered.map((c) => {
                 const rowKey = contactRowKey(c);
                 const isHighlighted = highlight === rowKey;
+                const isSelected = selectedKeys.has(rowKey);
                 return (
-                <div key={rowKey} id={`contact-row-${rowKey}`} className={cn("rounded-xl border p-3 sm:p-4 transition", isHighlighted ? "border-primary/50 bg-primary/10 ring-2 ring-primary/30" : "border-border/60 bg-card/40")}>
+                <div key={rowKey} id={`contact-row-${rowKey}`} className={cn("rounded-xl border p-3 sm:p-4 transition", isHighlighted ? "border-primary/50 bg-primary/10 ring-2 ring-primary/30" : isSelected ? "border-primary/30 bg-muted/30" : "border-border/60 bg-card/40")}>
                   <div className="flex items-start gap-3">
+                    {canDelete && (
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(value) => toggleSelectContact(c, value === true)}
+                        aria-label={`Select ${c.name || "contact"}`}
+                        className="mt-1"
+                      />
+                    )}
                     <InitialsAvatar
                       initials={c.initials}
                       accent={c.accent}
@@ -916,9 +846,16 @@ export function ContactsPage() {
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
                     <StatusPill status={c.status} />
-                    {showTemplateStatusColumn && (
-                      <ContactChannelIcons phone={c.phone} email={c.email} whatsappDelivery={c.whatsappDelivery} emailDelivery={c.emailDelivery} compact showWhatsApp={showWhatsAppTemplateStatus} showEmail={showEmailTemplateStatus} />
-                    )}
+                    <ContactChannelIcons
+                      phone={c.phone}
+                      email={c.email}
+                      whatsappDelivery={c.whatsappDelivery}
+                      emailDelivery={c.emailDelivery}
+                      compact
+                      whatsappEnabled={whatsappEnabled}
+                      emailEnabled={emailEnabled}
+                      queued={c.source === "queue"}
+                    />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {c.source === "queue" && (
@@ -926,24 +863,6 @@ export function ContactsPage() {
                         {syncingId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Sync to database"}
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditContact(c)}
-                      disabled={actionBusy}
-                      className="rounded-md text-xs"
-                    >
-                      <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setResendContact(c)}
-                      disabled={actionBusy || (!c.phone && !c.email)}
-                      className="rounded-md text-xs"
-                    >
-                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Resend
-                    </Button>
                     {canDelete && (
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(c)} className="rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
                         <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
@@ -988,57 +907,6 @@ export function ContactsPage() {
           </Button>
         </div>
       )}
-
-      <ContactEditDialog
-        open={Boolean(editContact)}
-        onOpenChange={(open) => {
-          if (!open && !actionBusy) setEditContact(null);
-        }}
-        initialPhone={editContact?.phone || ""}
-        initialEmail={editContact?.email || ""}
-        initialCountryCode={editContact?.countryCode || ""}
-        initialCountryName={editContact?.countryName || ""}
-        contactName={editContact?.name}
-        busy={actionBusy}
-        onSave={(values) => void handleSaveEdit(values)}
-      />
-
-      <ContactResendDialog
-        open={Boolean(resendContact)}
-        onOpenChange={(open) => {
-          if (!open && !actionBusy) setResendContact(null);
-        }}
-        title="Resend contact details"
-        description="Choose how to resend using the existing WhatsApp and Email workflows."
-        hasPhone={Boolean(resendContact?.phone?.trim())}
-        hasEmail={Boolean(resendContact?.email?.trim())}
-        busy={actionBusy}
-        onChoose={(choice) => {
-          if (choice === "none" || !resendContact) return;
-          void runResendForContact(resendContact, choice);
-        }}
-      />
-
-      <ContactResendDialog
-        open={Boolean(postEditResendContact)}
-        onOpenChange={(open) => {
-          if (!open && !actionBusy) setPostEditResendContact(null);
-        }}
-        title="Do you want to resend the updated contact details?"
-        description="Send the updated phone/email through the existing outreach workflows, or skip."
-        allowSkip
-        hasPhone={Boolean(postEditResendContact?.phone?.trim())}
-        hasEmail={Boolean(postEditResendContact?.email?.trim())}
-        busy={actionBusy}
-        onChoose={(choice) => {
-          if (!postEditResendContact) return;
-          if (choice === "none") {
-            setPostEditResendContact(null);
-            return;
-          }
-          void runResendForContact(postEditResendContact, choice);
-        }}
-      />
     </PageShell>
     </div>
   );

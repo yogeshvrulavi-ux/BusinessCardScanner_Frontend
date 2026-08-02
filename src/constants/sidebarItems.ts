@@ -6,6 +6,7 @@ import {
   Inbox,
   ScrollText,
   Settings,
+  CreditCard,
 } from "lucide-react";
 import type { UserRole } from "@/lib/AuthContext";
 
@@ -20,9 +21,6 @@ export type SidebarItem = {
 /**
  * Role-based sidebar. Items are filtered by authenticated user role.
  * Unauthorized routes are still blocked by AuthGate + backend RBAC.
- *
- * Super Admin: Employee Management (invite/manage Admins).
- * Admin: User Management (invite/manage Users).
  */
 export const sidebarItems: SidebarItem[] = [
   {
@@ -59,6 +57,12 @@ export const sidebarItems: SidebarItem[] = [
     title: "Offline Queue",
     url: "/queue",
     icon: Inbox,
+    roles: ["SUPER_ADMIN", "ADMIN", "USER"],
+  },
+  {
+    title: "Subscription",
+    url: "/subscription",
+    icon: CreditCard,
     roles: ["SUPER_ADMIN", "ADMIN", "USER"],
   },
   {

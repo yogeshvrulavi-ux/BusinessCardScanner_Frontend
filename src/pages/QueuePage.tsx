@@ -41,6 +41,9 @@ import {
 } from "@/lib/contactStorage";
 import { toast } from "sonner";
 import { useAuth, type AuthUser } from "@/lib/AuthContext";
+import { useStorageQuota } from "@/contexts/StorageQuotaContext";
+import { StorageWarningBanner } from "@/components/subscription/StorageWarningBanner";
+import { UpgradePlanDialog } from "@/components/subscription/UpgradePlanDialog";
 import {
   listPlatformOfflineQueue,
   publishOfflineQueueSnapshot,
@@ -76,6 +79,8 @@ function stampLocalOwner(items: QueueItem[], authUser: AuthUser | null): QueueIt
 export function QueuePage() {
   const { confirm } = useConfirmModal();
   const { user } = useAuth();
+  const { isBlocked } = useStorageQuota();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   const isAdmin = user?.role === "ADMIN";
   /** Show Captured by / Organisation for Super Admin (all) and Admin (company). */
@@ -203,6 +208,11 @@ export function QueuePage() {
       toast.info("The platform-wide queue is read-only.");
       return;
     }
+    if (isBlocked) {
+      setUpgradeOpen(true);
+      toast.error("Storage limit reached. Upgrade your subscription to continue scanning.");
+      return;
+    }
     if (isSavingAll) return;
 
     const unsynced = queueItems.filter(
@@ -232,6 +242,11 @@ export function QueuePage() {
   const handleSaveQueueItem = async (item: QueueItem) => {
     if (isSuperAdmin || item.id.startsWith("platform:")) {
       toast.info("Platform queue records are read-only.");
+      return;
+    }
+    if (isBlocked) {
+      setUpgradeOpen(true);
+      toast.error("Storage limit reached. Upgrade your subscription to continue scanning.");
       return;
     }
     setSyncingQueueId(item.id);
@@ -384,6 +399,8 @@ export function QueuePage() {
   return (
     <div className="page-bottom-safe lg:pb-0">
       <PageShell title={PAGE.syncQueue.title} description={PAGE.syncQueue.description}>
+        <UpgradePlanDialog open={upgradeOpen} onOpenChange={setUpgradeOpen} />
+        <StorageWarningBanner />
         <Card className="sticky top-0 z-10 rounded-2xl border-border/60 bg-card/95 p-3 shadow-soft backdrop-blur-md sm:p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground sm:text-sm">
@@ -392,7 +409,7 @@ export function QueuePage() {
             <div className="flex flex-wrap gap-2">
               <Button
                 onClick={() => void saveAllFromQueue()}
-                disabled={isSuperAdmin || isBusy || isLoading || stats.waiting === 0}
+                disabled={isSuperAdmin || isBusy || isLoading || stats.waiting === 0 || isBlocked}
                 className="min-w-0 flex-1 rounded-md bg-gradient-primary shadow-glow disabled:opacity-50 sm:flex-none"
               >
                 {isSavingAll ? (

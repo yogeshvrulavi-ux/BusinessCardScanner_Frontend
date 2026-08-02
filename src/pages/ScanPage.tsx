@@ -4,7 +4,10 @@ import { Camera, Upload, ScanLine, Sparkles, FileImage, X, Loader2, CheckCircle2
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/layout/PageShell";
+import { StorageWarningBanner } from "@/components/subscription/StorageWarningBanner";
+import { UpgradePlanDialog } from "@/components/subscription/UpgradePlanDialog";
 import { PAGE } from "@/constants/navigation";
+import { useStorageQuota } from "@/contexts/StorageQuotaContext";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useContactsDirectory } from "@/hooks/useContactsDirectory";
 import { loadUserSettings } from "@/lib/settingsStorage";
@@ -28,6 +31,8 @@ export function ScanPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const captureSourceRef = useRef<string>("Upload");
+  const { isBlocked } = useStorageQuota();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -37,6 +42,13 @@ export function ScanPage() {
   const [error, setError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [tipIndex, setTipIndex] = useState(0);
+
+  const guardCapture = (): boolean => {
+    if (!isBlocked) return true;
+    setUpgradeOpen(true);
+    toast.error("Storage limit reached. Upgrade your subscription to continue scanning.");
+    return false;
+  };
   // Same role-scoped directory as Contacts (USER / ADMIN / SUPER_ADMIN).
   const { contacts: directoryContacts } = useContactsDirectory();
   const [removedRecentIds, setRemovedRecentIds] = useState<Set<string>>(() => {
@@ -98,27 +110,36 @@ export function ScanPage() {
     return true;
   };
 
-  /** Upload icon flow: pick from local folder, OCR as-is, then review */
+  /** Upload icon flow: pick from local folder → optimize → OCR → review */
   const handleUploadFromFolder = async (selectedFile: File) => {
+    if (!guardCapture()) return;
     if (!processFile(selectedFile)) return;
     try {
       const dataUrl = await readFileAsDataUrl(selectedFile);
       captureSourceRef.current = "Upload";
       await runScanPipeline(selectedFile, dataUrl, true);
+      // Prefer optimized session image for any remaining preview before navigate.
+      const { loadScanSession } = await import("@/lib/scanSession");
+      const session = loadScanSession();
+      if (session.imageDataUrl) setPreview(session.imageDataUrl);
     } catch (err) {
       console.error(err);
       setError("Failed to read the selected image.");
     }
   };
 
-  /** Camera icon flow: capture, OCR as-is, then review (camera stays open until Continue) */
+  /** Camera icon flow: capture → optimize → OCR → review */
   const handleCameraCapture = async (capturedFile: File) => {
     setCameraOpen(false);
+    if (!guardCapture()) return;
     if (!processFile(capturedFile)) return;
     try {
       const dataUrl = await readFileAsDataUrl(capturedFile);
       captureSourceRef.current = "Camera";
       await runScanPipeline(capturedFile, dataUrl, true);
+      const { loadScanSession } = await import("@/lib/scanSession");
+      const session = loadScanSession();
+      if (session.imageDataUrl) setPreview(session.imageDataUrl);
     } catch (err) {
       console.error(err);
       setError("Failed to process camera capture.");
@@ -206,6 +227,7 @@ export function ScanPage() {
 
   const handleProcess = async () => {
     if (!file || !preview) return;
+    if (!guardCapture()) return;
     await runScanPipeline(file, preview, false);
   };
 
@@ -227,6 +249,9 @@ export function ScanPage() {
 
   return (
     <PageShell title={PAGE.capture.title} description={PAGE.capture.description}>
+      <UpgradePlanDialog open={upgradeOpen} onOpenChange={setUpgradeOpen} />
+      <StorageWarningBanner />
+
       {/* Interactive greeting banner */}
       <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/40 p-5 backdrop-blur-xl shadow-soft">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -258,6 +283,19 @@ export function ScanPage() {
         </div>
       </div>
 
+      {isBlocked ? (
+        <Card className="rounded-2xl border-destructive/30 bg-destructive/5 p-5 shadow-soft">
+          <h3 className="text-sm font-semibold text-destructive">Storage limit reached</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Upgrade your subscription to continue scanning. Camera, gallery, and offline capture are
+            paused until storage is available.
+          </p>
+          <Button asChild className="mt-3 rounded-md bg-gradient-primary shadow-glow">
+            <Link to="/subscription">Upgrade Now</Link>
+          </Button>
+        </Card>
+      ) : null}
+
       <div className="grid gap-6 lg:grid-cols-5">
         {/* Dropzone */}
         <Card className="relative overflow-hidden rounded-2xl border-border/60 p-6 shadow-soft lg:col-span-3 flex flex-col">
@@ -271,6 +309,7 @@ export function ScanPage() {
             }}
             accept="image/jpeg,image/png,image/jpg,.jpg,.jpeg,.png"
             className="hidden"
+            disabled={isBlocked}
           />
           
           <div 
@@ -344,10 +383,25 @@ export function ScanPage() {
                 {error && <div className="mt-4 text-sm text-destructive font-medium bg-destructive/10 px-3 py-1.5 rounded-lg">{error}</div>}
                 
                 <div className="mt-6 flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2 w-full">
-                    <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto rounded-md bg-gradient-primary shadow-glow">
+                    <Button
+                      onClick={() => {
+                        if (!guardCapture()) return;
+                        fileInputRef.current?.click();
+                      }}
+                      disabled={isBlocked}
+                      className="w-full sm:w-auto rounded-md bg-gradient-primary shadow-glow"
+                    >
                     <FileImage className="mr-2 h-4 w-4" /> Choose from folder
                   </Button>
-                  <Button variant="outline" onClick={() => setCameraOpen(true)} className="w-full sm:w-auto rounded-md">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (!guardCapture()) return;
+                      setCameraOpen(true);
+                    }}
+                    disabled={isBlocked}
+                    className="w-full sm:w-auto rounded-md"
+                  >
                     <Camera className="mr-2 h-4 w-4" /> Use camera
                   </Button>
                 </div>

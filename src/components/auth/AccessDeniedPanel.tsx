@@ -38,7 +38,7 @@ export function AccessDeniedPanel() {
             to="/scan"
             className="h-11 rounded-md bg-gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:opacity-95"
           >
-            Go to Dashboard
+            Go to Capture
           </Link>
           <Link
             to="/auth/$pathname"

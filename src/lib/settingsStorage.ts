@@ -25,8 +25,8 @@ export type UserSettings = {
 };
 
 const STORAGE_KEY = "cs-user-settings";
-/** One-time reset so existing browsers adopt the new outreach-off defaults. */
-const OUTREACH_DEFAULTS_OFF_MIGRATION_KEY = "cs-outreach-defaults-off-v1";
+/** Re-enable thank-you email after SES cutover (older builds forced email off in localStorage). */
+const EMAIL_OUTREACH_REENABLE_KEY = "cs-email-outreach-reenable-ses-v1";
 /** One-time cleanup of old placeholder profile values ("Workspace owner" etc.). */
 const PROFILE_PLACEHOLDERS_MIGRATION_KEY = "cs-profile-placeholders-cleared-v1";
 /** Old defaults that were silently saved as if the user had typed them. */
@@ -73,8 +73,9 @@ export function loadUserSettings(): UserSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY, "1");
+      // No stored prefs — WhatsApp + Email default ON for new / first-visit users.
       localStorage.setItem(PROFILE_PLACEHOLDERS_MIGRATION_KEY, "1");
+      localStorage.setItem(EMAIL_OUTREACH_REENABLE_KEY, "1");
       return { ...DEFAULT_USER_SETTINGS };
     }
     const parsed = JSON.parse(raw) as Partial<UserSettings>;
@@ -91,24 +92,28 @@ export function loadUserSettings(): UserSettings {
     const autoSyncQueueWhenOnline =
       parsed.autoSyncQueueWhenOnline ??
       DEFAULT_USER_SETTINGS.autoSyncQueueWhenOnline;
-    const needsOutreachDefaultsMigration =
-      !localStorage.getItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY);
 
-    const merged = {
+    // Merge defaults first so missing keys (incl. WhatsApp/Email) stay ON.
+    // Explicitly saved false continues to win via ...parsed — except the one-time
+    // SES re-enable below, which turns email back on after older "email off" builds.
+    const merged: UserSettings = {
       ...DEFAULT_USER_SETTINGS,
       ...parsed,
       autoSyncQueueWhenOnline,
-      ...(needsOutreachDefaultsMigration
-        ? {
-            emailNotificationsEnabled: false,
-            whatsappNotificationsEnabled: false,
-          }
-        : {}),
+      emailNotificationsEnabled:
+        parsed.emailNotificationsEnabled ??
+        DEFAULT_USER_SETTINGS.emailNotificationsEnabled,
+      whatsappNotificationsEnabled:
+        parsed.whatsappNotificationsEnabled ??
+        DEFAULT_USER_SETTINGS.whatsappNotificationsEnabled,
     };
-    if (needsOutreachDefaultsMigration) {
+
+    if (!localStorage.getItem(EMAIL_OUTREACH_REENABLE_KEY)) {
+      merged.emailNotificationsEnabled = true;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      localStorage.setItem(OUTREACH_DEFAULTS_OFF_MIGRATION_KEY, "1");
+      localStorage.setItem(EMAIL_OUTREACH_REENABLE_KEY, "1");
     }
+
     return merged;
   } catch {
     return { ...DEFAULT_USER_SETTINGS };

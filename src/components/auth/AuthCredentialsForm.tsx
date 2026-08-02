@@ -155,6 +155,13 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
 
         <SubmitButton loading={submitting} label="Log in" />
       </form>
+
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        New to NameCardScan?{" "}
+        <Link to="/signup" className="font-medium text-primary hover:text-primary/80">
+          Create an account
+        </Link>
+      </p>
     </div>
   );
 }

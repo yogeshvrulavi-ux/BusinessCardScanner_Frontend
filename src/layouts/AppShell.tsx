@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 
 import { AuthGate } from "@/components/auth/AuthGate";
+import { FreemiumWelcomeModal } from "@/components/subscription/FreemiumWelcomeModal";
+import { StorageQuotaProvider } from "@/contexts/StorageQuotaContext";
 import { syncConnectionModeWithNetwork } from "@/lib/connectionMode";
 import { isAuthEnabled } from "@/lib/authConfig";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
@@ -19,12 +21,16 @@ import { loadUserSettings } from "@/lib/settingsStorage";
 import { useForceLightMode } from "@/hooks/useForceLightMode";
 import { publishOfflineQueueSnapshot } from "@/lib/offlineQueueRegistry";
 
+/** Module-level guard — online + mode-change can fire together on reconnect. */
+let appShellAutoSyncInFlight = false;
+
 export function AppShell() {
   const { queryClient } = useRouteContext({ from: "__root__" });
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isAuthRoute = pathname.startsWith("/auth");
   const isRegisterRoute = pathname.startsWith("/register");
-  const isPublicShellRoute = isAuthRoute || isRegisterRoute;
+  const isSignupRoute = pathname.startsWith("/signup");
+  const isPublicShellRoute = isAuthRoute || isRegisterRoute || isSignupRoute;
   const authRequired = isAuthEnabled;
 
   useForceLightMode(isPublicShellRoute);
@@ -39,14 +45,16 @@ export function AppShell() {
 
     const processAutoSync = async () => {
       if (!navigator.onLine) return;
-
-      // Report before auto-sync removes successful items, then reconcile after.
-      await publishOfflineQueueSnapshot().catch(() => undefined);
-
-      const prefs = loadUserSettings();
-      if (!prefs.autoSyncQueueWhenOnline) return;
+      if (appShellAutoSyncInFlight) return;
+      appShellAutoSyncInFlight = true;
 
       try {
+        // Report before auto-sync removes successful items, then reconcile after.
+        await publishOfflineQueueSnapshot().catch(() => undefined);
+
+        const prefs = loadUserSettings();
+        if (!prefs.autoSyncQueueWhenOnline) return;
+
         const pending = await countPendingSync();
         const totalPending = pending.queue;
         if (totalPending === 0) return;
@@ -68,11 +76,12 @@ export function AppShell() {
           }
           if (synced > 0 && showToast) {
             const remaining = summary.queueRemaining;
-            toast.success(
-              remaining > 0
-                ? `Synced ${synced} of ${total} contact(s). ${remaining} still pending.`
-                : `Synced ${synced} contact(s) to database. Offline queue is empty.`,
-            );
+            toast.success("Internet Restored", {
+              description:
+                remaining > 0
+                  ? `${synced} of ${total} contacts synced. ${remaining} still pending.`
+                  : `${synced} contact${synced === 1 ? "" : "s"} synced successfully.`,
+            });
           }
 
           window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
@@ -84,6 +93,8 @@ export function AppShell() {
       } catch {
         /* auto-sync is best-effort */
         window.dispatchEvent(new CustomEvent("cs-sync-end"));
+      } finally {
+        appShellAutoSyncInFlight = false;
       }
     };
 
@@ -103,7 +114,8 @@ export function AppShell() {
 
     const handleConnectionModeChange = (e: Event) => {
       const mode = (e as CustomEvent<"online" | "offline">).detail;
-      if (mode === "online" && navigator.onLine) {
+      // online event already triggers processAutoSync; skip duplicate from mode change.
+      if (mode === "online" && navigator.onLine && !appShellAutoSyncInFlight) {
         void processAutoSync();
       }
     };
@@ -136,23 +148,26 @@ export function AppShell() {
 
   const appContent = (
     <ConfirmModalProvider>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background">
-          <AppSidebar />
-          <SidebarInset className="relative flex min-h-svh flex-1 flex-col bg-transparent">
-            <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-surface" />
-            <div className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-              <InstallPrompt />
-              <TopBar />
-              <NetworkOfflineBanner />
-            </div>
-            <main className="min-h-0 flex-1 w-full max-w-full overflow-x-hidden overflow-y-auto">
-              <Outlet />
-            </main>
-          </SidebarInset>
-        </div>
-        <CookieConsentBanner />
-      </SidebarProvider>
+      <StorageQuotaProvider>
+        <FreemiumWelcomeModal />
+        <SidebarProvider>
+          <div className="flex min-h-screen w-full bg-background">
+            <AppSidebar />
+            <SidebarInset className="relative flex min-h-svh flex-1 flex-col bg-transparent">
+              <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-surface" />
+              <div className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+                <InstallPrompt />
+                <TopBar />
+                <NetworkOfflineBanner />
+              </div>
+              <main className="min-h-0 flex-1 w-full max-w-full overflow-x-hidden overflow-y-auto">
+                <Outlet />
+              </main>
+            </SidebarInset>
+          </div>
+          <CookieConsentBanner />
+        </SidebarProvider>
+      </StorageQuotaProvider>
     </ConfirmModalProvider>
   );
 
