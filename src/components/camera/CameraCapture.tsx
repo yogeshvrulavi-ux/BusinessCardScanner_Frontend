@@ -36,6 +36,7 @@ type Phase = "live" | "preview";
 /** Near-lossless JPEG for OCR; storage compression happens after OCR. */
 const CAPTURE_JPEG_QUALITY = 0.98;
 const NO_FOCUS_SETTLE_MS = 400;
+const MANUAL_CAPTURE_SETTLE_MS = 400;
 
 const STATUS_COPY: Record<AlignmentStatus, { title: string; hint: string }> = {
   searching: {
@@ -237,15 +238,21 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
           window.setTimeout(() => resolve(false), AUTOFOCUS_TIMEOUT_MS);
         }),
       ]);
-      if (!focused) {
-        setCaptureHint("Hold the camera steady…");
-        await new Promise((r) => window.setTimeout(r, NO_FOCUS_SETTLE_MS));
-      } else {
-        setCaptureHint("Capturing sharp frame…");
-      }
+      // Always settle briefly so the lens/frame stabilize before the snap
+      // (manual: required ~300–500ms; auto: short settle when AF ran).
+      const settleMs =
+        source === "manual"
+          ? MANUAL_CAPTURE_SETTLE_MS
+          : focused
+            ? NO_FOCUS_SETTLE_MS
+            : NO_FOCUS_SETTLE_MS;
+      setCaptureHint(focused ? "Capturing sharp frame…" : "Hold the camera steady…");
+      await new Promise((r) => window.setTimeout(r, settleMs));
     } catch {
       setCaptureHint("Hold the camera steady…");
-      await new Promise((r) => window.setTimeout(r, NO_FOCUS_SETTLE_MS));
+      await new Promise((r) =>
+        window.setTimeout(r, source === "manual" ? MANUAL_CAPTURE_SETTLE_MS : NO_FOCUS_SETTLE_MS),
+      );
     }
 
     const file = await snapFrame();

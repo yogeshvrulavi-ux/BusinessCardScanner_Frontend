@@ -8,6 +8,8 @@ export type ScanContact = {
   designation?: string;
   company?: string;
   companyName?: string;
+  countryCode?: string;
+  countryName?: string;
   phone?: string;
   phoneNumber?: string;
   secondaryPhone?: string;
@@ -19,6 +21,8 @@ export type ScanContact = {
   address?: string;
   secondaryAddress?: string;
   notes?: string;
+  eventName?: string;
+  eventDay?: string;
   phones?: string[];
   mobileNumbers?: string[];
   telephoneNumbers?: string[];
@@ -115,12 +119,12 @@ export function parseScanContact(raw: ScanContact): ParsedScanResult {
     normalizePhoneValue,
   );
 
-  let countryCode = "";
-  let countryName = "";
+  let countryCode = String(raw.countryCode || "").trim();
+  let countryName = String(raw.countryName || "").trim();
   const phones = normalizedPhones
     .map((phone, index) => {
       const split = splitPhoneNumber(phone);
-      if (index === 0 && split.countryCode) {
+      if (index === 0 && !countryCode && split.countryCode) {
         countryCode = split.countryCode;
         countryName = split.countryName;
       }
@@ -164,7 +168,7 @@ export function parseScanContact(raw: ScanContact): ParsedScanResult {
     secondaryAddress: addresses[1] || "",
     socialLinks: socialLinksList.join(", "),
     gstNumber: gstNumbers[0] || "",
-    notes: "",
+    notes: String(raw.notes || "").trim(),
     phones,
     emails,
     websites,

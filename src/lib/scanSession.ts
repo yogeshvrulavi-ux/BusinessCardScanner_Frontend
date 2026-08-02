@@ -22,6 +22,12 @@ export type ScanSessionMeta = {
   emailError?: string | null;
   emailTo?: string | null;
   emailExtracted?: string | null;
+  /** When set, Review saves via update (existing contact) instead of create. */
+  editContactId?: string;
+  editSource?: "localdb" | "indexeddb" | "queue";
+  /** Baseline for post-edit resend prompt (email / phone change detection). */
+  originalEmail?: string;
+  originalPhone?: string;
 };
 
 export function storeScanSession(
@@ -62,6 +68,24 @@ export function clearScanSession() {
   sessionStorage.removeItem(SCAN_IMAGE_KEY);
   sessionStorage.removeItem(SCAN_META_KEY);
   window.dispatchEvent(new CustomEvent("cs-scan-updated"));
+}
+
+/** Prefill Review for editing an existing saved/queued contact (no OCR re-run). */
+export function storeContactEditSession(input: {
+  contact: ScanContact;
+  imageDataUrl?: string | null;
+  contactId: string;
+  source: "localdb" | "indexeddb" | "queue";
+  originalEmail: string;
+  originalPhone: string;
+}) {
+  storeScanSession(input.contact, input.imageDataUrl || undefined, {
+    captureSource: "edit",
+    editContactId: input.contactId,
+    editSource: input.source,
+    originalEmail: input.originalEmail,
+    originalPhone: input.originalPhone,
+  });
 }
 
 export function isValidCardImage(file: File): boolean {

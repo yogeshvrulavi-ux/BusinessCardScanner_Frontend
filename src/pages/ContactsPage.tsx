@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Search, Filter, RefreshCw, Plus, Trash2, Send, Loader2 } from "lucide-react";
+import { Search, Filter, RefreshCw, Plus, Trash2, Send, Loader2, Pencil, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,12 +34,28 @@ import { fetchContactById, fetchContactsPage, mapRawContact } from "@/lib/contac
 import { getCachedContacts, getQueueItems } from "@/lib/indexeddb";
 import { loadEvents, resolveEventNameForContact } from "@/lib/eventStorage";
 import { contactBelongsToAppUser, getCurrentAppUser, getCurrentAppUserSync } from "@/lib/currentAppUser";
-import { getOutreachStatusForContactSync } from "@/lib/outreachStatusStorage";
+import { getOutreachStatusForContactSync, recordOutreachFromSyncResult } from "@/lib/outreachStatusStorage";
 import type { ContactStatus } from "@/lib/contactStatus";
 import { Route as ContactsRoute } from "@/routes/contacts";
 import { cn } from "@/lib/utils";
 import { ContactChannelIcons } from "@/components/contacts/ContactChannelIcons";
 import { CardImageCell } from "@/components/contacts/CardImageCell";
+import {
+  ContactResendDialog,
+  type ResendChannelSelection,
+} from "@/components/contacts/ContactActionDialogs";
+import {
+  getLocalContactRaw,
+  queueContactToPayload,
+  sendThankYouOutreach,
+  type ThankYouOutreachResult,
+} from "@/lib/localContactApi";
+import type { LeadPayload } from "@/lib/cardImage";
+import type { SyncResult } from "@/lib/contactApi";
+import { notifyOutreachAfterSync } from "@/lib/outreachFeedback";
+import { storeContactEditSession } from "@/lib/scanSession";
+import type { ScanContact } from "@/lib/scanResult";
+import { splitPhoneNumber } from "@/lib/phoneCountry";
 import {
   TABLE_PAGE_SIZE,
   TablePagination,
@@ -47,6 +63,47 @@ import {
 } from "@/components/ui/table-pagination";
 
 export type Contact = DirectoryContact;
+
+function outreachResultToSyncResult(data: ThankYouOutreachResult): SyncResult {
+  return {
+    success: true,
+    emailSent: data.email_sent === true,
+    emailAttempted: data.email_sent === true || Boolean(data.email_error),
+    emailError: data.email_error ?? null,
+    emailTo: data.email_to ?? null,
+    emailExtracted: data.email_extracted ?? null,
+    whatsappSent: data.whatsapp_sent === true,
+    whatsappAttempted: data.whatsapp_sent === true || Boolean(data.whatsapp_error),
+    whatsappError: data.whatsapp_error ?? null,
+  };
+}
+
+function rawToScanContact(raw: Record<string, unknown>): ScanContact {
+  return {
+    fullName: String(raw.fullName || raw.name || ""),
+    firstName: String(raw.firstName || ""),
+    lastName: String(raw.lastName || ""),
+    designation: String(raw.designation || raw.title || ""),
+    company: String(raw.company || ""),
+    companyName: String(raw.company || ""),
+    countryCode: String(raw.countryCode || ""),
+    countryName: String(raw.countryName || ""),
+    phone: String(raw.phone || ""),
+    secondaryPhone: String(raw.secondaryPhone || ""),
+    email: String(raw.email || raw.emailAddress || ""),
+    secondaryEmail: String(raw.secondaryEmail || ""),
+    website: String(raw.website || ""),
+    secondaryWebsite: String(raw.secondaryWebsite || ""),
+    address: String(raw.address || ""),
+    secondaryAddress: String(raw.secondaryAddress || ""),
+    notes: String(raw.notes || ""),
+    eventName: String(raw.eventName || ""),
+    eventDay: String(raw.eventDay || ""),
+    socialLinks: String(raw.socialLinks || "")
+      ? [String(raw.socialLinks || "")]
+      : [],
+  };
+}
 
 async function loadQueueAsDirectoryContacts(): Promise<DirectoryContact[]> {
   const appUser = await getCurrentAppUser();
@@ -81,6 +138,8 @@ async function loadQueueAsDirectoryContacts(): Promise<DirectoryContact[]> {
         title: c.title || c.designation || "No Title",
         email: c.email || "",
         phone: c.phone || "",
+        countryCode: String(c.countryCode || ""),
+        countryName: String(c.countryName || ""),
         eventName: resolveEventNameForContact({
           eventName: String(c.eventName || ""),
           email: String(c.email || ""),
@@ -157,6 +216,8 @@ export function ContactsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [resendContact, setResendContact] = useState<Contact | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   /** Debounce search so each keystroke does not hit Postgres. */
   const [debouncedQ, setDebouncedQ] = useState(q);
@@ -393,6 +454,132 @@ export function ContactsPage() {
     } catch (err: unknown) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to delete contact.");
+    }
+  };
+
+  const handleEditContact = async (contact: Contact) => {
+    setActionBusy(true);
+    try {
+      let raw: Record<string, unknown>;
+      let imageDataUrl: string | undefined;
+
+      if (contact.source === "queue") {
+        const items = await getQueueItems();
+        const item = items.find((qi) => qi.id === contact.id);
+        if (!item) {
+          toast.error("Queued contact not found.");
+          return;
+        }
+        raw = { ...(item.contact_data as Record<string, unknown>) };
+        if (item.image_base64?.startsWith("data:image/")) {
+          imageDataUrl = item.image_base64;
+        }
+      } else {
+        raw = await getLocalContactRaw(contact.id);
+        const storedImage = String(raw.cardImageBase64 || "");
+        if (storedImage.startsWith("data:image/")) {
+          imageDataUrl = storedImage;
+        }
+      }
+
+      const scanContact = rawToScanContact(raw);
+      const phoneSplit = splitPhoneNumber(String(scanContact.phone || ""));
+      const localPhone =
+        phoneSplit.localNumber ||
+        String(scanContact.phone || "").replace(/\D/g, "");
+      const countryCode =
+        String(scanContact.countryCode || "").trim() || phoneSplit.countryCode;
+      const countryName =
+        String(scanContact.countryName || "").trim() || phoneSplit.countryName;
+
+      storeContactEditSession({
+        contact: {
+          ...scanContact,
+          countryCode,
+          countryName,
+          phone: localPhone,
+          phoneNumber: localPhone,
+        },
+        imageDataUrl,
+        contactId: contact.id,
+        source: contact.source === "queue" ? "queue" : "localdb",
+        originalEmail: String(scanContact.email || contact.email || ""),
+        originalPhone: localPhone || String(contact.phone || ""),
+      });
+      void navigate({ to: "/review" });
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Failed to open contact for editing.");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleResendSend = async (selection: ResendChannelSelection) => {
+    if (!resendContact) return;
+    if (!selection.whatsapp && !selection.email) {
+      setResendContact(null);
+      return;
+    }
+    setActionBusy(true);
+    try {
+      let payload: LeadPayload = {
+        fullName: resendContact.name || "Contact",
+        designation: resendContact.title || "",
+        company: resendContact.company || "",
+        phone: resendContact.phone || "",
+        email: resendContact.email || "",
+        website: "",
+        address: "",
+        eventName: resendContact.eventName || "",
+        notes: resendContact.notes || "",
+        countryCode: resendContact.countryCode || "",
+        countryName: resendContact.countryName || "",
+      };
+      const contactId =
+        resendContact.source === "queue" ? undefined : resendContact.id;
+
+      if (resendContact.source === "queue") {
+        const items = await getQueueItems();
+        const item = items.find((qi) => qi.id === resendContact.id);
+        if (item) {
+          payload = queueContactToPayload(item.contact_data as Record<string, unknown>);
+        }
+      } else {
+        try {
+          const raw = await getLocalContactRaw(resendContact.id);
+          payload = queueContactToPayload(raw);
+        } catch {
+          // Fall back to directory fields.
+        }
+      }
+
+      const result = await sendThankYouOutreach(payload, {
+        skipWhatsApp: !selection.whatsapp,
+        skipEmail: !selection.email,
+        contactId,
+      });
+      const syncResult = outreachResultToSyncResult(result);
+      await recordOutreachFromSyncResult(
+        {
+          email: resendContact.email,
+          phone: resendContact.phone,
+          name: resendContact.name,
+        },
+        syncResult,
+      );
+      notifyOutreachAfterSync(userSettings, syncResult);
+      if (contactId) {
+        window.dispatchEvent(
+          new CustomEvent("cs-contacts-updated", { detail: { contactId } }),
+        );
+      }
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Failed to resend contact details.");
+    } finally {
+      setActionBusy(false);
+      setResendContact(null);
     }
   };
 
@@ -775,6 +962,28 @@ export function ContactsPage() {
                               {syncingId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Send className="mr-1.5 h-3 w-3" />Sync</>}
                             </Button>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => void handleEditContact(c)}
+                            disabled={actionBusy}
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-md"
+                            aria-label="Edit contact"
+                            title="Edit"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setResendContact(c)}
+                            disabled={actionBusy || (!c.phone && !c.email)}
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-md"
+                            aria-label="Resend WhatsApp or Email"
+                            title="Resend"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
                           {canDelete && (
                             <Button variant="ghost" size="icon" onClick={() => handleDelete(c)} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md cursor-pointer">
                               <Trash2 className="h-4 w-4" />
@@ -863,6 +1072,24 @@ export function ContactsPage() {
                         {syncingId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Sync to database"}
                       </Button>
                     )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleEditContact(c)}
+                      disabled={actionBusy}
+                      className="rounded-md text-xs"
+                    >
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setResendContact(c)}
+                      disabled={actionBusy || (!c.phone && !c.email)}
+                      className="rounded-md text-xs"
+                    >
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Resend
+                    </Button>
                     {canDelete && (
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(c)} className="rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
                         <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
@@ -907,6 +1134,19 @@ export function ContactsPage() {
           </Button>
         </div>
       )}
+
+      <ContactResendDialog
+        open={Boolean(resendContact)}
+        onOpenChange={(open) => {
+          if (!open && !actionBusy) setResendContact(null);
+        }}
+        title="Resend Contact"
+        description="Choose WhatsApp and/or Email. Existing templates and send logic are used — no new contact is created."
+        hasPhone={Boolean(resendContact?.phone?.trim())}
+        hasEmail={Boolean(resendContact?.email?.trim())}
+        busy={actionBusy}
+        onSend={(selection) => void handleResendSend(selection)}
+      />
     </PageShell>
     </div>
   );

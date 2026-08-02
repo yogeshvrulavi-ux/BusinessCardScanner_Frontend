@@ -52,7 +52,7 @@ import { notifyOutreachAfterSync } from "@/lib/outreachFeedback";
 import { loadUserSettings } from "@/lib/settingsStorage";
 import { emptyScanContact, parseScanContact } from "@/lib/scanResult";
 import { scanFileAndStore } from "@/lib/scanPipeline";
-import { loadScanSession, readFileAsDataUrl, dataUrlToFile, isEmptyScanContact } from "@/lib/scanSession";
+import { loadScanSession, readFileAsDataUrl, dataUrlToFile, isEmptyScanContact, clearScanSession } from "@/lib/scanSession";
 import { EventNameCombobox } from "@/components/review/EventNameCombobox";
 import { EventDaySelect } from "@/components/review/EventDaySelect";
 import { CountryCodeSelect } from "@/components/review/CountryCodeSelect";
@@ -62,7 +62,39 @@ import { splitPhoneNumber } from "@/lib/phoneCountry";
 import { findCountryByDialCode } from "@/constants/countries";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useConfirmModal } from "@/components/ui/confirm-modal";
+import { ContactResendDialog, type ResendChannelSelection } from "@/components/contacts/ContactActionDialogs";
+import {
+  getLocalContactRaw,
+  queueContactToPayload,
+  sendThankYouOutreach,
+  type ThankYouOutreachResult,
+} from "@/lib/localContactApi";
+import { getQueueItems, updateQueueItem } from "@/lib/indexeddb";
+import { recordOutreachFromSyncResult } from "@/lib/outreachStatusStorage";
+import type { SyncResult } from "@/lib/contactApi";
 import { cn } from "@/lib/utils";
+
+function outreachResultToSyncResult(data: ThankYouOutreachResult): SyncResult {
+  return {
+    success: true,
+    emailSent: data.email_sent === true,
+    emailAttempted: data.email_sent === true || Boolean(data.email_error),
+    emailError: data.email_error ?? null,
+    emailTo: data.email_to ?? null,
+    emailExtracted: data.email_extracted ?? null,
+    whatsappSent: data.whatsapp_sent === true,
+    whatsappAttempted: data.whatsapp_sent === true || Boolean(data.whatsapp_error),
+    whatsappError: data.whatsapp_error ?? null,
+  };
+}
+
+function normalizeCompareEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function normalizeComparePhone(value: string): string {
+  return value.replace(/\D/g, "");
+}
 
 const initialValues = leadFields.reduce<Record<string, string>>((acc, field) => {
   acc[field.name] = "";
@@ -193,6 +225,13 @@ export const ReviewPage = () => {
   const [eventError, setEventError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const notesRef = useRef("");
+  const [editContactId, setEditContactId] = useState<string | null>(null);
+  const [editSource, setEditSource] = useState<"localdb" | "indexeddb" | "queue" | null>(null);
+  const [originalEmail, setOriginalEmail] = useState("");
+  const [originalPhone, setOriginalPhone] = useState("");
+  const [postEditResendOpen, setPostEditResendOpen] = useState(false);
+  const [postEditResendBusy, setPostEditResendBusy] = useState(false);
+  const [pendingResendPayload, setPendingResendPayload] = useState<LeadPayload | null>(null);
   const { success, error, info } = useToast();
   const { confirm } = useConfirmModal();
   const speech = useSpeechToText({
@@ -268,12 +307,23 @@ export const ReviewPage = () => {
       socialLinks: raw.socialLinks,
       gstNumber: raw.gstNumber,
     });
+    if (raw.notes) setNotes(raw.notes);
   }, [form.setMany, stopListening]);
 
   const loadFromSession = useCallback(() => {
     const { contact, imageDataUrl, meta } = loadScanSession();
     if (imageDataUrl) setSavedScanImage(imageDataUrl);
-    if (contact) applyScanData(parseScanContact(contact));
+    if (contact) {
+      const parsed = parseScanContact(contact);
+      applyScanData(parsed);
+      const eventFromContact = String(contact.eventName || "").trim();
+      if (eventFromContact) {
+        setEventName(eventFromContact);
+        eventNameRef.current = eventFromContact;
+      }
+      const dayFromContact = String(contact.eventDay || "").trim();
+      if (dayFromContact) setEventDay(normalizeEventDay(dayFromContact));
+    }
     setOcrWarning(meta?.ocrWarning ?? null);
     scanMetaRef.current = {
       ocrEngine: meta?.ocrEngine,
@@ -287,6 +337,19 @@ export const ReviewPage = () => {
       optimizedBytes: meta?.optimizedImageBytes,
       captureSource: meta?.captureSource,
     });
+    if (meta?.editContactId) {
+      setEditContactId(meta.editContactId);
+      setEditSource(meta.editSource || "localdb");
+      setOriginalEmail(meta.originalEmail || "");
+      setOriginalPhone(meta.originalPhone || "");
+      // Editing an existing contact — never re-run OCR from the stored image.
+      autoExtractedRef.current = true;
+    } else {
+      setEditContactId(null);
+      setEditSource(null);
+      setOriginalEmail("");
+      setOriginalPhone("");
+    }
   }, [applyScanData]);
 
   const handleFormChange = (name: string, value: string) => {
@@ -541,12 +604,58 @@ export const ReviewPage = () => {
   };
 
   const finishAfterSave = () => {
-    sessionStorage.removeItem("latestScanResult");
+    clearScanSession();
     navigate({ to: "/contacts" });
   };
 
   const outreachSkipWhatsApp = (settingsSnapshot = loadUserSettings()) =>
     !settingsSnapshot.whatsappNotificationsEnabled;
+
+  const maybePromptResendAfterEdit = (payload: LeadPayload, contactId: string) => {
+    const emailChanged =
+      normalizeCompareEmail(payload.email || "") !== normalizeCompareEmail(originalEmail);
+    const phoneChanged =
+      normalizeComparePhone(payload.phone || "") !== normalizeComparePhone(originalPhone);
+    if (!emailChanged && !phoneChanged) {
+      finishAfterSave();
+      return;
+    }
+    setPendingResendPayload(payload);
+    setEditContactId(contactId);
+    setPostEditResendOpen(true);
+  };
+
+  const handlePostEditResend = async (selection: ResendChannelSelection) => {
+    if (!selection.whatsapp && !selection.email) {
+      setPostEditResendOpen(false);
+      finishAfterSave();
+      return;
+    }
+    const payload = pendingResendPayload || buildPayload();
+    const contactId = editContactId;
+    setPostEditResendBusy(true);
+    try {
+      const result = await sendThankYouOutreach(payload, {
+        skipWhatsApp: !selection.whatsapp,
+        skipEmail: !selection.email,
+        contactId: editSource === "queue" ? undefined : contactId || undefined,
+      });
+      const syncResult = outreachResultToSyncResult(result);
+      await recordOutreachFromSyncResult(
+        { email: payload.email, phone: payload.phone, name: payload.fullName },
+        syncResult,
+      );
+      notifyOutreachAfterSync(loadUserSettings(), syncResult);
+    } catch (err: unknown) {
+      console.error(err);
+      error(err instanceof Error ? err.message : "Failed to resend contact details.");
+    } finally {
+      setPostEditResendBusy(false);
+      setPostEditResendOpen(false);
+      setPendingResendPayload(null);
+      finishAfterSave();
+    }
+  };
 
   const persistContact = async (
     payload: LeadPayload,
@@ -566,11 +675,33 @@ export const ReviewPage = () => {
     }
     const storageUp = await checkStorageHealth();
     const label = storageLabel();
+    const editingId = existingId || editContactId || undefined;
+
+    if (editSource === "queue" && editingId) {
+      const items = await getQueueItems();
+      const item = items.find((qi) => qi.id === editingId);
+      if (!item) throw new Error("Queued contact not found.");
+      await updateQueueItem({
+        ...item,
+        contact_data: {
+          ...item.contact_data,
+          ...payload,
+          name: payload.fullName,
+          title: payload.designation,
+          emailAddress: payload.email,
+        },
+        image_base64: imageDataUrl || item.image_base64,
+      });
+      success("Queued contact updated.");
+      window.dispatchEvent(new CustomEvent("cs-queue-updated"));
+      maybePromptResendAfterEdit(payload, editingId);
+      return;
+    }
 
     if (storageUp) {
-      let contactId = existingId;
+      let contactId = editingId;
 
-      if (existingId) {
+      if (editingId) {
         const updatePayload =
           merge && duplicateMatch
             ? {
@@ -581,7 +712,7 @@ export const ReviewPage = () => {
                 address: payload.address || String(duplicateMatch.contact.address || ""),
               }
             : payload;
-        await updateContact(existingId, updatePayload, imageDataUrl);
+        await updateContact(editingId, updatePayload, imageDataUrl);
 
         if (!isOfflineMode() && navigator.onLine) {
           // Backend handles CRM sync transparently
@@ -599,7 +730,7 @@ export const ReviewPage = () => {
 
         if (saved.queued) {
           info("Saved to queue. Will sync to database automatically when you're online.");
-          sessionStorage.removeItem("latestScanResult");
+          clearScanSession();
           navigate({ to: "/queue" });
           return;
         }
@@ -622,8 +753,10 @@ export const ReviewPage = () => {
 
       }
 
-      if (existingId) {
+      if (editingId) {
         success(`Contact updated in ${label}.`);
+        maybePromptResendAfterEdit(payload, editingId);
+        return;
       }
 
       finishAfterSave();
@@ -639,7 +772,7 @@ export const ReviewPage = () => {
         !settingsSnapshot.emailNotificationsEnabled || !pickPrimaryEmail(payload),
     });
     info("Saved to browser queue. Will sync when storage is available.");
-    sessionStorage.removeItem("latestScanResult");
+    clearScanSession();
     navigate({ to: "/queue" });
   };
 
@@ -662,6 +795,8 @@ export const ReviewPage = () => {
         await persistContact(payload, imageFile, duplicateMatch.contact.id, false);
       } else if (action === "merge" && duplicateMatch?.contact.id) {
         await persistContact(payload, imageFile, duplicateMatch.contact.id, true);
+      } else if (editContactId) {
+        await persistContact(payload, imageFile, editContactId, false);
       } else {
         await persistContact(payload, imageFile);
       }
@@ -718,6 +853,12 @@ export const ReviewPage = () => {
     const imageFile = await resolveCardImageFile(upload.file, upload.previewUrl, savedScanImage);
     pendingPayloadRef.current = payload;
     pendingImageRef.current = imageFile;
+
+    // Editing an existing contact: update in place — do not run duplicate detection.
+    if (editContactId) {
+      await executeSave("new");
+      return;
+    }
 
     const { duplicates } = await checkForDuplicates(payload);
     if (duplicates.length > 0) {
@@ -1032,6 +1173,27 @@ export const ReviewPage = () => {
         match={duplicateMatch}
         incoming={pendingPayloadRef.current ?? buildPayload()}
         onResolve={executeSave}
+      />
+
+      <ContactResendDialog
+        open={postEditResendOpen}
+        onOpenChange={(open) => {
+          if (!open && !postEditResendBusy) {
+            setPostEditResendOpen(false);
+            finishAfterSave();
+          }
+        }}
+        mode="after-edit"
+        title="Contact information has changed"
+        description="Would you like to resend WhatsApp and/or Email using the updated details?"
+        hasPhone={Boolean((pendingResendPayload?.phone || form.values.phoneNumber || "").trim())}
+        hasEmail={Boolean((pendingResendPayload?.email || form.values.emailAddress || "").trim())}
+        busy={postEditResendBusy}
+        onSend={(selection) => void handlePostEditResend(selection)}
+        onSkip={() => {
+          setPostEditResendOpen(false);
+          finishAfterSave();
+        }}
       />
 
     </PageContainer>
