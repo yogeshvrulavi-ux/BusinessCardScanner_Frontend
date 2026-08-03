@@ -1,7 +1,7 @@
 import { API_BASE_URL } from "@/lib/api";
 import { apiFetch } from "@/lib/apiFetch";
 import {
-  formatStorageBytes,
+  formatStorageWithCardEstimate,
   getPlanById,
   resolveUiWarningLevel,
   type UiWarningLevel,
@@ -66,9 +66,9 @@ function emptySnapshot(): StorageQuotaSnapshot {
     remainingMb: plan.storageBytes / (1024 * 1024),
     canUpload: true,
     warningLevel: "NORMAL",
-    usedLabel: "0 MB",
-    limitLabel: plan.storageLabel,
-    remainingLabel: plan.storageLabel,
+    usedLabel: formatStorageWithCardEstimate(0),
+    limitLabel: formatStorageWithCardEstimate(plan.storageBytes, plan.storageLabel),
+    remainingLabel: formatStorageWithCardEstimate(plan.storageBytes, plan.storageLabel),
   };
 }
 
@@ -104,9 +104,9 @@ export function normalizeQuota(raw: CompanyQuotaPayload | null | undefined): Sto
     remainingMb: Number(raw.remaining_mb ?? remaining / (1024 * 1024)) || 0,
     canUpload,
     warningLevel,
-    usedLabel: formatStorageBytes(used),
-    limitLabel: formatStorageBytes(limit),
-    remainingLabel: formatStorageBytes(remaining),
+    usedLabel: formatStorageWithCardEstimate(used),
+    limitLabel: formatStorageWithCardEstimate(limit),
+    remainingLabel: formatStorageWithCardEstimate(remaining),
   };
 }
 

@@ -20,8 +20,18 @@ import {
   shouldSuppressFreemiumWelcome,
   wasFreemiumWelcomeSeenThisSession,
 } from "@/lib/freemiumWelcome";
+import {
+  formatStorageWithCardEstimate,
+  getPlanById,
+} from "@/lib/subscriptionPlans";
 
-const INCLUDED = ["20 MB Storage", "OCR", "WhatsApp", "Email"] as const;
+const freemiumPlan = getPlanById("FREEMIUM");
+const INCLUDED = [
+  formatStorageWithCardEstimate(freemiumPlan.storageBytes, freemiumPlan.storageLabel),
+  "Scan Card",
+  "WhatsApp",
+  "Email",
+] as const;
 const UPGRADES = ["1 GB", "5 GB", "10 GB"] as const;
 
 /**
@@ -147,7 +157,7 @@ export function FreemiumWelcomeModal() {
 
         <DialogFooter className="gap-2 border-t border-border/50 bg-muted/20 px-6 py-4 sm:justify-between">
           <Button type="button" variant="outline" className="rounded-lg" onClick={dismiss}>
-            Continue
+            Continue as Freemium
           </Button>
           <Button asChild className="rounded-lg bg-gradient-primary shadow-glow" onClick={dismiss}>
             <Link to="/subscription">Upgrade Now</Link>

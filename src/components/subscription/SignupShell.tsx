@@ -41,7 +41,7 @@ export function SignupShell({
         </header>
         <div className="relative z-10 mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-5 py-8 sm:px-10">
           <div className="mb-2 inline-flex w-fit rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
-            Default plan · Freemium · 20 MB
+            Default plan · Freemium · 1 MB (~10 Cards)
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-[#1e3a5f]">{title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>

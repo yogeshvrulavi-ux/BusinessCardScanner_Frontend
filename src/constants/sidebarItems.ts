@@ -30,7 +30,7 @@ export const sidebarItems: SidebarItem[] = [
     roles: ["SUPER_ADMIN", "ADMIN", "USER"],
   },
   {
-    title: "Employee Management",
+    title: "Manage Team",
     url: "/companies",
     icon: Users,
     roles: ["SUPER_ADMIN"],

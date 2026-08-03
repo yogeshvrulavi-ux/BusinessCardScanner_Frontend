@@ -5,11 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useStorageQuota } from "@/contexts/StorageQuotaContext";
+import {
+  approximateCardCapacity,
+  formatCardCount,
+  formatCardCountExact,
+  formatStorageBytes,
+} from "@/lib/subscriptionPlans";
 import { cn } from "@/lib/utils";
 
 /** Compact premium storage summary for the Dashboard only. */
 export function DashboardStorageSummary({ className }: { className?: string }) {
   const { quota, loading, isBlocked } = useStorageQuota();
+
+  const usedLabel = formatStorageBytes(quota.usedStorageBytes);
+  const limitLabel = formatStorageBytes(quota.storageLimitBytes);
+  const cardsStored = approximateCardCapacity(quota.usedStorageBytes);
+  const cardsCapacity = approximateCardCapacity(quota.storageLimitBytes);
 
   const barTone =
     quota.warningLevel === "BLOCKED"
@@ -32,7 +43,7 @@ export function DashboardStorageSummary({ className }: { className?: string }) {
           </div>
           <div className="min-w-0">
             <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Storage
+              Storage Used
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold tracking-tight">Summary</span>
@@ -58,8 +69,8 @@ export function DashboardStorageSummary({ className }: { className?: string }) {
       <div className="mt-4">
         <div className="mb-1.5 flex items-baseline justify-between gap-2">
           <span className="text-sm font-semibold tabular-nums">
-            {loading ? "…" : quota.usedLabel}
-            <span className="font-normal text-muted-foreground"> / {quota.limitLabel}</span>
+            {loading ? "…" : usedLabel}
+            <span className="font-normal text-muted-foreground"> / {limitLabel}</span>
           </span>
           <span className="text-xs font-semibold tabular-nums text-primary">
             {quota.usedPercentage}%
@@ -69,9 +80,14 @@ export function DashboardStorageSummary({ className }: { className?: string }) {
           value={Math.min(100, Math.max(0, quota.usedPercentage))}
           className={cn("h-2", barTone)}
         />
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          Remaining <span className="font-medium text-foreground">{quota.remainingLabel}</span>
-        </p>
+        <div className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
+          <p>
+            ~{formatCardCountExact(cardsStored)} Cards Stored
+          </p>
+          <p>
+            ~{formatCardCount(cardsCapacity)} Cards Capacity
+          </p>
+        </div>
       </div>
     </Card>
   );

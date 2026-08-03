@@ -76,9 +76,9 @@ export function CurrentPlanPanel({ className }: { className?: string }) {
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <Metric label="Storage" value={loading ? "…" : quota.limitLabel} />
         <Metric label="Storage used" value={loading ? "…" : quota.usedLabel} />
         <Metric label="Remaining" value={loading ? "…" : quota.remainingLabel} />
-        <Metric label="Usage" value={`${quota.usedPercentage}%`} />
       </div>
 
       <div className="mt-5">

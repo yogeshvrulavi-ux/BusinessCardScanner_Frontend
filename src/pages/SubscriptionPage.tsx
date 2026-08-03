@@ -5,6 +5,7 @@ import {
   Contact,
   HelpCircle,
   Minus,
+  Plus,
   ScanLine,
   Settings,
   Sparkles,
@@ -12,16 +13,35 @@ import {
 
 import { PageShell } from "@/components/layout/PageShell";
 import { CurrentPlanPanel } from "@/components/subscription/CurrentPlanPanel";
-import { EventSpecialOffers } from "@/components/subscription/EventSpecialOffers";
 import { PlanPricingCards } from "@/components/subscription/PlanPricingCards";
 import { StorageWarningBanner } from "@/components/subscription/StorageWarningBanner";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useStorageQuota } from "@/contexts/StorageQuotaContext";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { loadBillingCycle, saveBillingCycle } from "@/lib/freemiumWelcome";
-import type { BillingCycle } from "@/lib/subscriptionPlans";
+import {
+  formatStorageWithCardEstimate,
+  getPlanById,
+  type BillingCycle,
+} from "@/lib/subscriptionPlans";
 import { cn } from "@/lib/utils";
+
+const freemiumPlan = getPlanById("FREEMIUM");
+const starterPlan = getPlanById("STARTER");
+const builderPlan = getPlanById("BUILDER");
+const growthPlan = getPlanById("GROWTH");
 
 const FEATURE_ROWS: {
   feature: string;
@@ -33,13 +53,13 @@ const FEATURE_ROWS: {
 }[] = [
   {
     feature: "Storage",
-    freemium: "20 MB",
-    starter: "1 GB",
-    builder: "3 GB",
-    growth: "5 GB",
+    freemium: formatStorageWithCardEstimate(freemiumPlan.storageBytes, freemiumPlan.storageLabel),
+    starter: formatStorageWithCardEstimate(starterPlan.storageBytes, starterPlan.storageLabel),
+    builder: formatStorageWithCardEstimate(builderPlan.storageBytes, builderPlan.storageLabel),
+    growth: formatStorageWithCardEstimate(growthPlan.storageBytes, growthPlan.storageLabel),
     enterprise: "Custom",
   },
-  { feature: "OCR", freemium: true, starter: true, builder: true, growth: true, enterprise: true },
+  { feature: "Scan Card", freemium: true, starter: true, builder: true, growth: true, enterprise: true },
   {
     feature: "WhatsApp",
     freemium: true,
@@ -58,18 +78,26 @@ const FEATURE_ROWS: {
     enterprise: true,
   },
   {
-    feature: "Priority Support",
-    freemium: false,
+    feature: "Onboarding Support",
+    freemium: true,
     starter: true,
     builder: true,
     growth: true,
     enterprise: true,
   },
   {
-    feature: "Team Ready",
-    freemium: false,
-    starter: false,
-    builder: false,
+    feature: "Priority Support",
+    freemium: "—",
+    starter: "Standard",
+    builder: "Extended",
+    growth: "Premium",
+    enterprise: "Premium",
+  },
+  {
+    feature: "Manage Team",
+    freemium: true,
+    starter: true,
+    builder: true,
     growth: true,
     enterprise: true,
   },
@@ -85,8 +113,8 @@ const FAQS = [
     a: "Yes — use the billing toggle on this page. Annual plans show savings where applicable.",
   },
   {
-    q: "How do event specials work?",
-    a: "Event offers are available for exhibitions such as TTF and IITM. Contact sales to activate per-user event pricing.",
+    q: "What is the Renewer Pack?",
+    a: "After Freemium storage expires, the Renewer Pack ($1/month) retains all customer data while you decide on an upgrade.",
   },
 ];
 
@@ -94,6 +122,7 @@ export function SubscriptionPage() {
   const { firstName } = useUserSettings();
   const { quota, isBlocked } = useStorageQuota();
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const [faqSectionOpen, setFaqSectionOpen] = useState(false);
 
   useEffect(() => {
     setCycle(loadBillingCycle());
@@ -186,8 +215,6 @@ export function SubscriptionPage() {
         <PlanPricingCards cycle={cycle} currentPlanId={quota.plan} />
       </section>
 
-      <EventSpecialOffers />
-
       <section className="space-y-3">
         <h2 className="text-base font-semibold tracking-tight">Feature comparison</h2>
         <Card className="overflow-hidden rounded-2xl border-border/60 shadow-soft">
@@ -220,20 +247,53 @@ export function SubscriptionPage() {
         </Card>
       </section>
 
-      <section className="space-y-3">
-        <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
-          <HelpCircle className="h-4 w-4 text-primary" />
-          FAQ
-        </h2>
-        <div className="grid gap-3 md:grid-cols-3">
-          {FAQS.map((item) => (
-            <Card key={item.q} className="rounded-2xl border-border/60 p-4 shadow-soft">
-              <h3 className="text-sm font-semibold">{item.q}</h3>
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{item.a}</p>
-            </Card>
-          ))}
-        </div>
-      </section>
+      <Collapsible open={faqSectionOpen} onOpenChange={setFaqSectionOpen} className="space-y-3">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left shadow-soft transition-colors hover:bg-muted/20"
+          >
+            <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
+              <HelpCircle className="h-4 w-4 text-primary" />
+              FAQ
+            </h2>
+            <span className="relative h-4 w-4 shrink-0">
+              <Plus
+                className={cn(
+                  "absolute inset-0 h-4 w-4 text-muted-foreground transition-opacity",
+                  faqSectionOpen ? "opacity-0" : "opacity-100",
+                )}
+              />
+              <Minus
+                className={cn(
+                  "absolute inset-0 h-4 w-4 text-muted-foreground transition-opacity",
+                  faqSectionOpen ? "opacity-100" : "opacity-0",
+                )}
+              />
+            </span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+          <Card className="rounded-2xl border-border/60 p-2 shadow-soft sm:p-3">
+            <Accordion type="single" collapsible className="w-full">
+              {FAQS.map((item) => (
+                <AccordionItem key={item.q} value={item.q} className="border-border/60 px-2">
+                  <AccordionTrigger className="group py-3 text-sm font-semibold hover:no-underline [&>svg:last-child]:hidden">
+                    <span className="pr-3 text-left">{item.q}</span>
+                    <span className="relative ml-auto h-4 w-4 shrink-0">
+                      <Plus className="absolute inset-0 h-4 w-4 text-muted-foreground group-data-[state=open]:hidden" />
+                      <Minus className="absolute inset-0 hidden h-4 w-4 text-muted-foreground group-data-[state=open]:block" />
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="text-xs leading-relaxed text-muted-foreground">
+                    {item.a}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
     </PageShell>
   );
 }

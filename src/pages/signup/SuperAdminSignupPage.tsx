@@ -55,7 +55,7 @@ export function SuperAdminSignupPage() {
       );
       toast.success("Freemium workspace requested", {
         description:
-          "Default plan: Freemium (20 MB). Complete activation with your secure invitation link, then sign in.",
+          "Default plan: Freemium (1 MB, ~10 Cards). Complete activation with your secure invitation link, then sign in.",
       });
       void navigate({ to: "/auth/$pathname", params: { pathname: "sign-in" } });
     } finally {
@@ -66,7 +66,7 @@ export function SuperAdminSignupPage() {
   return (
     <SignupShell
       title="Super Admin signup"
-      subtitle="Register your company. Default plan is Freemium with 20 MB storage."
+      subtitle="Register your company. Default plan is Freemium with 1 MB storage (~10 Cards)."
     >
       <form className="space-y-3" onSubmit={onSubmit}>
         <AuthField

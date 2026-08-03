@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Bell,
   Cookie,
@@ -8,16 +9,28 @@ import {
   Loader2,
   Mail,
   MessageCircle,
+  Phone,
   ScanLine,
   Scale,
   Shield,
+  ShieldCheck,
   Trash2,
   Wifi,
 } from "lucide-react";
-import { clearLocalQueueOnly, wipeAllAppData } from "@/lib/wipeAllData";
+import {
+  clearLocalQueueOnly,
+  confirmMobileVerificationOtp,
+  isMobileNumberVerified,
+  markMobileNumberVerified,
+  notifyDataDeletion,
+  sendMobileVerificationOtp,
+  wipeAllAppData,
+} from "@/lib/wipeAllData";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { PageShell } from "@/components/layout/PageShell";
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { GoogleDriveConnectCard } from "@/components/settings/GoogleDriveConnectCard";
@@ -32,6 +45,8 @@ import { useAuth } from "@/lib/AuthContext";
 import { syncProfileFromAuthUser } from "@/lib/authProfileSync";
 import { useConfirmModal } from "@/components/ui/confirm-modal";
 import { hasCookieConsent, saveCookieConsent } from "@/lib/cookieConsent";
+import { useStorageQuota } from "@/contexts/StorageQuotaContext";
+import { isFreemiumExpired } from "@/lib/subscriptionPlans";
 import {
   applyWorkModePreference,
   DEFAULT_USER_SETTINGS,
@@ -79,16 +94,25 @@ function SettingRow({
 }
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   const { confirm } = useConfirmModal();
   const { user: authUser, refetchProfile, hasRole } = useAuth();
+  const { quota } = useStorageQuota();
   const showGoogleDrive = hasRole("ADMIN", "SUPER_ADMIN");
   const [profile, setProfile] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [isSaving, setIsSaving] = useState(false);
   const [isWiping, setIsWiping] = useState(false);
   const [isClearingQueue, setIsClearingQueue] = useState(false);
   const [cookiesOpen, setCookiesOpen] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isConfirmingOtp, setIsConfirmingOtp] = useState(false);
+  const [mobileVerified, setMobileVerified] = useState(false);
 
   const initials = useMemo(() => getUserInitials(profile.fullName), [profile.fullName]);
+  const freemiumExpired = isFreemiumExpired(quota);
+  const requiresMobileVerification = freemiumExpired && !mobileVerified;
 
   useEffect(() => {
     if (authUser) {
@@ -108,7 +132,12 @@ export function SettingsPage() {
         ? { ...mergedProfile, cookiesAccepted: true }
         : mergedProfile,
     );
-  }, [authUser?.email, authUser?.first_name, authUser?.last_name]);
+    setMobileVerified(isMobileNumberVerified(authUser?.id, mergedProfile.phone));
+  }, [authUser?.email, authUser?.first_name, authUser?.last_name, authUser?.id]);
+
+  useEffect(() => {
+    setMobileVerified(isMobileNumberVerified(authUser?.id, profile.phone));
+  }, [authUser?.id, profile.phone]);
 
   const updateProfileField = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
     setProfile((prev) => ({ ...prev, [key]: value }));
@@ -139,52 +168,134 @@ export function SettingsPage() {
     }
   };
 
-  const handleClearQueue = async () => {
-    const ok = await confirm({
-      title: "Clear offline queue?",
-      description:
-        "Remove only your offline sync queue on this device. Other users' queued contacts are not affected.",
-      confirmLabel: "Clear queue",
+  const goToCapture = () => {
+    void navigate({ to: "/scan" });
+  };
+
+  const handleDeleteMyData = async () => {
+    const step1 = await confirm({
+      title: "Delete My Data",
+      description: "This will permanently delete all scans stored in your local queue.",
+      confirmLabel: "Yes, Delete My Data",
+      cancelLabel: "No, Don't Delete My Data",
       destructive: true,
     });
-    if (!ok) return;
+    if (!step1) {
+      goToCapture();
+      return;
+    }
+
+    const step2 = await confirm({
+      title: "Confirm Deletion",
+      description: "Are you absolutely sure you want to permanently delete your data?",
+      confirmLabel: "Yes",
+      cancelLabel: "No",
+      destructive: true,
+    });
+    if (!step2) {
+      goToCapture();
+      return;
+    }
+
     setIsClearingQueue(true);
     try {
       const removed = await clearLocalQueueOnly();
+      await notifyDataDeletion("local_queue");
       toast.success(
         removed > 0
-          ? `Cleared ${removed} queued contact${removed === 1 ? "" : "s"} from your queue.`
+          ? `Deleted ${removed} queued scan${removed === 1 ? "" : "s"} from your local queue.`
           : "Your offline queue is already empty.",
       );
     } catch {
-      toast.error("Failed to clear queue.");
+      toast.error("Failed to delete local queue data.");
     } finally {
       setIsClearingQueue(false);
     }
   };
 
-  const handleWipeAll = async () => {
-    const ok = await confirm({
-      title: "Delete your data?",
-      description:
-        "Remove your contacts, queue, and outreach status on this device. Records are soft-deleted for audit and recovery.",
-      confirmLabel: "Delete my data",
+  const handleDeleteOrganisationData = async () => {
+    const step1 = await confirm({
+      title: "Delete Organisation Data",
+      description: "This will permanently delete organisation data for your workspace.",
+      confirmLabel: "Yes, Delete My Data",
+      cancelLabel: "No, Don't Delete My Data",
       destructive: true,
     });
-    if (!ok) return;
+    if (!step1) {
+      goToCapture();
+      return;
+    }
+
+    const step2 = await confirm({
+      title: "Confirm Deletion",
+      description: "Are you absolutely sure you want to permanently delete your data?",
+      confirmLabel: "Yes",
+      cancelLabel: "No",
+      destructive: true,
+    });
+    if (!step2) {
+      goToCapture();
+      return;
+    }
+
     setIsWiping(true);
     try {
       const result = await wipeAllAppData();
       const browser = result.browser;
       toast.success(
         browser
-          ? `Your data cleared (${browser.contactsRemoved} device contact${browser.contactsRemoved === 1 ? "" : "s"}, ${browser.queueRemoved} queue item${browser.queueRemoved === 1 ? "" : "s"}).`
-          : "Your data cleared on this device.",
+          ? `Organisation data cleared (${browser.contactsRemoved} device contact${browser.contactsRemoved === 1 ? "" : "s"}, ${browser.queueRemoved} queue item${browser.queueRemoved === 1 ? "" : "s"}).`
+          : "Organisation data cleared.",
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Wipe failed.");
     } finally {
       setIsWiping(false);
+    }
+  };
+
+  const handleSendMobileOtp = async () => {
+    const phone = profile.phone.trim();
+    if (!phone) {
+      toast.error("Enter your mobile number in the profile phone field first.");
+      return;
+    }
+    setIsSendingOtp(true);
+    try {
+      saveUserSettings({ phone });
+      const result = await sendMobileVerificationOtp(phone);
+      setOtpSent(true);
+      setOtp("");
+      toast.success(result.message || "Verification code sent.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send code.");
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleConfirmMobileOtp = async () => {
+    if (otp.length !== 6) {
+      toast.error("Enter the 6-digit verification code.");
+      return;
+    }
+    if (!authUser?.id) {
+      toast.error("Sign in again to verify your mobile number.");
+      return;
+    }
+    setIsConfirmingOtp(true);
+    try {
+      const result = await confirmMobileVerificationOtp({ phone: profile.phone.trim(), otp });
+      markMobileNumberVerified(authUser.id, profile.phone);
+      setMobileVerified(true);
+      setOtpSent(false);
+      setOtp("");
+      void refetchProfile();
+      toast.success(result.message || "Mobile number verified.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not verify code.");
+    } finally {
+      setIsConfirmingOtp(false);
     }
   };
 
@@ -198,6 +309,64 @@ export function SettingsPage() {
       />
 
       <div className="flex flex-col gap-5">
+        {requiresMobileVerification ? (
+          <Card className="rounded-2xl border-amber-500/30 bg-amber-500/5 p-6 shadow-soft">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <ShieldCheck className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+              Mobile verification required
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Your Freemium plan has expired. Verify your mobile number with a one-time code
+              (sent to your registered email) before continuing.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+              <div className="relative">
+                <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="tel"
+                  value={profile.phone}
+                  onChange={(e) => updateProfileField("phone", e.target.value)}
+                  className="h-10 rounded-md border-border/60 bg-background pl-9"
+                  placeholder="+91 XXXXX XXXXX"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-md"
+                disabled={isSendingOtp || !profile.phone.trim()}
+                onClick={() => void handleSendMobileOtp()}
+              >
+                {isSendingOtp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                {otpSent ? "Resend code" : "Send OTP"}
+              </Button>
+            </div>
+            {otpSent ? (
+              <div className="mt-4 space-y-3">
+                <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+                <Button
+                  type="button"
+                  className="rounded-md bg-gradient-primary"
+                  disabled={isConfirmingOtp || otp.length !== 6}
+                  onClick={() => void handleConfirmMobileOtp()}
+                >
+                  {isConfirmingOtp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                  Verify mobile
+                </Button>
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
+
         <ProfileSettingsCard
           profile={profile}
           initials={initials}
@@ -411,21 +580,24 @@ export function SettingsPage() {
               <div className="mt-1 text-xs text-muted-foreground">
                 Irreversible actions affecting data on this device.
               </div>
+              <p className="mt-2 max-w-md text-[11px] text-muted-foreground">
+                Delete My Data removes all locally stored scans from your offline queue.
+              </p>
             </div>
             <div className="mt-4 flex w-full flex-col gap-2 sm:mt-0 sm:w-auto sm:flex-row">
               <Button
                 variant="outline"
                 className="w-full rounded-md sm:w-auto"
-                onClick={handleClearQueue}
+                onClick={() => void handleDeleteMyData()}
                 disabled={isClearingQueue || isWiping}
               >
                 {isClearingQueue ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
-                Clear local queue
+                Delete My Data
               </Button>
               <Button
                 variant="destructive"
                 className="w-full rounded-md sm:w-auto"
-                onClick={handleWipeAll}
+                onClick={() => void handleDeleteOrganisationData()}
                 disabled={isWiping || isClearingQueue}
               >
                 {isWiping ? (
@@ -433,7 +605,7 @@ export function SettingsPage() {
                 ) : (
                   <Trash2 className="mr-1.5 h-3 w-3" />
                 )}
-                Delete all data
+                Delete Organisation Data
               </Button>
             </div>
           </div>

@@ -6,12 +6,17 @@ import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/layout/PageShell";
 import { StorageWarningBanner } from "@/components/subscription/StorageWarningBanner";
 import { UpgradePlanDialog } from "@/components/subscription/UpgradePlanDialog";
+import { CardImageCell } from "@/components/contacts/CardImageCell";
+import { ImageOptimizationStats } from "@/components/preview/ImagePreview";
 import { PAGE } from "@/constants/navigation";
 import { useStorageQuota } from "@/contexts/StorageQuotaContext";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useContactsDirectory } from "@/hooks/useContactsDirectory";
+import { useAuth } from "@/lib/AuthContext";
 import { loadUserSettings } from "@/lib/settingsStorage";
 import { isValidCardImage, readFileAsDataUrl } from "@/lib/scanSession";
+import { isFreemiumExpired } from "@/lib/subscriptionPlans";
+import { isMobileNumberVerified } from "@/lib/wipeAllData";
 import { toast } from "sonner";
 
 const CameraCapture = lazy(() =>
@@ -31,11 +36,16 @@ export function ScanPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const captureSourceRef = useRef<string>("Upload");
-  const { isBlocked } = useStorageQuota();
+  const { quota, isBlocked } = useStorageQuota();
+  const { user: authUser } = useAuth();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [imageStats, setImageStats] = useState<{
+    originalBytes: number;
+    optimizedBytes: number;
+  } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -44,6 +54,14 @@ export function ScanPage() {
   const [tipIndex, setTipIndex] = useState(0);
 
   const guardCapture = (): boolean => {
+    if (isFreemiumExpired(quota)) {
+      const phone = loadUserSettings().phone || "";
+      if (!isMobileNumberVerified(authUser?.id, phone)) {
+        toast.error("Verify your mobile number in Settings to continue after Freemium expiry.");
+        void navigate({ to: "/settings" });
+        return false;
+      }
+    }
     if (!isBlocked) return true;
     setUpgradeOpen(true);
     toast.error("Storage limit reached. Upgrade your subscription to continue scanning.");
@@ -104,10 +122,28 @@ export function ScanPage() {
     }
 
     setFile(selectedFile);
+    setImageStats(null);
     const reader = new FileReader();
     reader.onload = (e) => setPreview(e.target?.result as string);
     reader.readAsDataURL(selectedFile);
     return true;
+  };
+
+  /** Shared optimize step for folder upload and camera (same pipeline / target size). */
+  const prepareOptimizedImage = async (
+    selectedFile: File,
+    dataUrl: string,
+    source: "Upload" | "Camera",
+  ) => {
+    const { optimizeCardImage } = await import("@/lib/optimizeCardImage");
+    const optimized = await optimizeCardImage(selectedFile, source, dataUrl);
+    setFile(optimized.file);
+    setPreview(optimized.dataUrl);
+    setImageStats({
+      originalBytes: optimized.originalBytes,
+      optimizedBytes: optimized.optimizedBytes,
+    });
+    return optimized;
   };
 
   /** Upload icon flow: pick from local folder → optimize → OCR → review */
@@ -117,11 +153,17 @@ export function ScanPage() {
     try {
       const dataUrl = await readFileAsDataUrl(selectedFile);
       captureSourceRef.current = "Upload";
-      await runScanPipeline(selectedFile, dataUrl, true);
-      // Prefer optimized session image for any remaining preview before navigate.
+      const optimized = await prepareOptimizedImage(selectedFile, dataUrl, "Upload");
+      await runScanPipeline(optimized.file, optimized.dataUrl, true);
       const { loadScanSession } = await import("@/lib/scanSession");
       const session = loadScanSession();
       if (session.imageDataUrl) setPreview(session.imageDataUrl);
+      if (session.meta?.originalImageBytes != null && session.meta?.optimizedImageBytes != null) {
+        setImageStats({
+          originalBytes: session.meta.originalImageBytes,
+          optimizedBytes: session.meta.optimizedImageBytes,
+        });
+      }
     } catch (err) {
       console.error(err);
       setError("Failed to read the selected image.");
@@ -136,10 +178,17 @@ export function ScanPage() {
     try {
       const dataUrl = await readFileAsDataUrl(capturedFile);
       captureSourceRef.current = "Camera";
-      await runScanPipeline(capturedFile, dataUrl, true);
+      const optimized = await prepareOptimizedImage(capturedFile, dataUrl, "Camera");
+      await runScanPipeline(optimized.file, optimized.dataUrl, true);
       const { loadScanSession } = await import("@/lib/scanSession");
       const session = loadScanSession();
       if (session.imageDataUrl) setPreview(session.imageDataUrl);
+      if (session.meta?.originalImageBytes != null && session.meta?.optimizedImageBytes != null) {
+        setImageStats({
+          originalBytes: session.meta.originalImageBytes,
+          optimizedBytes: session.meta.optimizedImageBytes,
+        });
+      }
     } catch (err) {
       console.error(err);
       setError("Failed to process camera capture.");
@@ -208,6 +257,7 @@ export function ScanPage() {
   const clearFile = () => {
     setFile(null);
     setPreview(null);
+    setImageStats(null);
     setProgress(0);
     setError(null);
     setIsComplete(false);
@@ -228,7 +278,14 @@ export function ScanPage() {
   const handleProcess = async () => {
     if (!file || !preview) return;
     if (!guardCapture()) return;
-    await runScanPipeline(file, preview, false);
+    try {
+      const source = /^camera$/i.test(captureSourceRef.current) ? "Camera" : "Upload";
+      const optimized = await prepareOptimizedImage(file, preview, source);
+      await runScanPipeline(optimized.file, optimized.dataUrl, false);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to optimize image.");
+    }
   };
 
   const removeRecentScan = (contactId: string) => {
@@ -324,7 +381,7 @@ export function ScanPage() {
           >
             {preview ? (
               <div className="w-full h-full flex flex-col items-center justify-center fade-in">
-                <div className="relative w-full max-w-[240px] rounded-xl overflow-hidden shadow-soft mb-4 border border-border/60">
+                <div className="relative w-full max-w-[240px] rounded-xl overflow-hidden shadow-soft mb-3 border border-border/60">
                   <img src={preview} alt="Card preview" className="w-full h-auto max-h-[160px] object-cover" />
                   {!isProcessing && !isComplete && (
                     <div className="absolute top-2 right-2">
@@ -335,7 +392,18 @@ export function ScanPage() {
                   )}
                 </div>
                 <div className="text-sm font-medium">{file?.name}</div>
-                <div className="text-xs text-muted-foreground">{(file?.size! / (1024*1024)).toFixed(2)} MB</div>
+                {imageStats ? (
+                  <div className="mt-2 w-full max-w-xs rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-left">
+                    <ImageOptimizationStats
+                      originalBytes={imageStats.originalBytes}
+                      optimizedBytes={imageStats.optimizedBytes}
+                    />
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    {file ? `${(file.size / 1024).toFixed(0)} KB` : ""}
+                  </div>
+                )}
                 
                 {error && <div className="mt-3 text-sm text-destructive font-medium bg-destructive/10 px-3 py-1.5 rounded-lg">{error}</div>}
                 
@@ -467,6 +535,15 @@ export function ScanPage() {
             </div>
           </div>
 
+          {imageStats ? (
+            <div className="mt-3 rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+              <ImageOptimizationStats
+                originalBytes={imageStats.originalBytes}
+                optimizedBytes={imageStats.optimizedBytes}
+              />
+            </div>
+          ) : null}
+
           <div className="mt-auto pt-4">
             {isComplete ? (
               <Button asChild className="w-full rounded-md bg-gradient-primary shadow-glow">
@@ -500,10 +577,19 @@ export function ScanPage() {
               key={c.id}
               className="min-w-[240px] shrink-0 snap-center rounded-2xl border border-border/60 bg-card p-3 shadow-soft transition-transform hover:-translate-y-0.5 sm:min-w-[200px]"
             >
-              <div className={`flex aspect-[1.6/1] items-end overflow-hidden rounded-xl bg-gradient-to-br ${c.accent} p-3`}>
-                <div className="text-white">
-                  <div className="text-xs font-semibold">{c.name}</div>
-                  <div className="text-[10px] opacity-80">{c.company}</div>
+              <div className="overflow-hidden rounded-xl border border-border/50 bg-muted/20">
+                <CardImageCell
+                  contactId={String(c.id)}
+                  hasCardImage={c.hasCardImage}
+                  queueImageDataUrl={c.queueImageDataUrl}
+                  contactName={c.name}
+                  className="w-full"
+                  hideName
+                  thumbnailClassName="aspect-[1.6/1] h-auto w-full max-h-none rounded-none object-cover"
+                />
+                <div className={`bg-gradient-to-br ${c.accent} px-3 py-2 text-white`}>
+                  <div className="truncate text-xs font-semibold">{c.name}</div>
+                  <div className="truncate text-[10px] opacity-80">{c.company}</div>
                 </div>
               </div>
               <div className="mt-2 flex items-center justify-between gap-2">

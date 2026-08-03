@@ -4,6 +4,58 @@ import {
   formatStorageBytes,
 } from "@/lib/optimizeCardImage";
 
+/** Shared original / optimized / compression stats (Scan + Review). */
+export function ImageOptimizationStats({
+  originalBytes,
+  optimizedBytes,
+  showOcrReady = true,
+  className,
+}: {
+  originalBytes?: number | null;
+  optimizedBytes?: number | null;
+  showOcrReady?: boolean;
+  className?: string;
+}) {
+  const hasSizes =
+    typeof originalBytes === "number" &&
+    originalBytes > 0 &&
+    typeof optimizedBytes === "number" &&
+    optimizedBytes >= 0;
+
+  if (!hasSizes) return null;
+
+  const saved = computeStorageSaved(originalBytes, optimizedBytes);
+  const compressionPct = Math.round(saved.savedPercent);
+
+  return (
+    <dl className={`max-w-xs space-y-0.5 text-[11px] leading-relaxed text-muted-foreground ${className || ""}`}>
+      <div className="flex items-center justify-between gap-4">
+        <dt>Original Size</dt>
+        <dd className="font-medium tabular-nums text-foreground">
+          {formatStorageBytes(originalBytes)}
+        </dd>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <dt>Optimized Size</dt>
+        <dd className="font-medium tabular-nums text-foreground">
+          {formatStorageBytes(optimizedBytes)}
+        </dd>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <dt>Compression Saved</dt>
+        <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
+          {compressionPct}%
+        </dd>
+      </div>
+      {showOcrReady ? (
+        <div className="pt-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+          OCR Ready ✓
+        </div>
+      ) : null}
+    </dl>
+  );
+}
+
 export const ImagePreview = ({
   src,
   onClear,
@@ -28,10 +80,6 @@ export const ImagePreview = ({
     typeof optimizedBytes === "number" &&
     optimizedBytes >= 0;
 
-  const saved = hasSizes
-    ? computeStorageSaved(originalBytes, optimizedBytes)
-    : null;
-
   return (
     <div className="space-y-3">
       <div className="overflow-hidden rounded-sm border border-border/50 bg-muted/10">
@@ -40,28 +88,11 @@ export const ImagePreview = ({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1.5">
           <p className="text-sm font-medium text-foreground">{title}</p>
-          {hasSizes && saved ? (
-            <dl className="max-w-xs space-y-0.5 text-[11px] leading-relaxed text-muted-foreground">
-              <div className="flex items-center justify-between gap-4">
-                <dt>Original Size</dt>
-                <dd className="font-medium tabular-nums text-foreground">
-                  {formatStorageBytes(originalBytes)}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <dt>Optimized Size</dt>
-                <dd className="font-medium tabular-nums text-foreground">
-                  {formatStorageBytes(optimizedBytes)}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <dt>Storage Saved</dt>
-                <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
-                  {formatStorageBytes(saved.savedBytes)}
-                  {saved.savedPercent > 0 ? ` (${saved.savedPercent}%)` : ""}
-                </dd>
-              </div>
-            </dl>
+          {hasSizes ? (
+            <ImageOptimizationStats
+              originalBytes={originalBytes}
+              optimizedBytes={optimizedBytes}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">Scanned card</p>
           )}

@@ -19,6 +19,10 @@ type CardImageCellProps = {
   /** Full name of the person who captured/scanned this card. */
   capturedBy?: string;
   className?: string;
+  /** Override thumbnail image sizing (default Contacts table cell). */
+  thumbnailClassName?: string;
+  /** Hide the name label above the thumb (useful when name is shown elsewhere). */
+  hideName?: boolean;
 };
 
 /**
@@ -51,6 +55,8 @@ export function CardImageCell({
   contactName,
   capturedBy,
   className,
+  thumbnailClassName,
+  hideName = false,
 }: CardImageCellProps) {
   const { src, markFailed } = useCardImage({ contactId, hasCardImage, queueImageDataUrl });
   const [open, setOpen] = useState(false);
@@ -96,10 +102,20 @@ export function CardImageCell({
   if (!src) {
     return (
       <span
-        className={cn( "inline-flex w-14 items-center justify-center rounded-md border border-dashed border-border/60 text-muted-foreground/50", className, )}
+        className={cn(
+          "inline-flex w-14 items-center justify-center rounded-md border border-dashed border-border/60 text-muted-foreground/50",
+          className,
+        )}
         title="No card image"
       >
-        <ImageOff className="h-3.5 w-3.5" />
+        <span
+          className={cn(
+            "flex h-9 w-14 items-center justify-center",
+            thumbnailClassName,
+          )}
+        >
+          <ImageOff className="h-3.5 w-3.5" />
+        </span>
       </span>
     );
   }
@@ -107,14 +123,14 @@ export function CardImageCell({
   return (
     <>
       <div className={cn("inline-flex w-14 flex-col items-stretch gap-0.5", className)}>
-        {contactName && (
+        {!hideName && contactName ? (
           <span
             className="truncate text-center text-[10px] font-medium leading-tight text-muted-foreground"
             title={contactName}
           >
             {contactName}
           </span>
-        )}
+        ) : null}
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -124,7 +140,10 @@ export function CardImageCell({
           <img
             src={shownSrc ?? undefined}
             alt={contactName ? `${contactName} business card` : "Business card"}
-            className="h-9 w-14 object-cover transition group-hover:scale-105"
+            className={cn(
+              "h-9 w-14 object-cover transition group-hover:scale-105",
+              thumbnailClassName,
+            )}
             onError={markFailed}
           />
         </button>

@@ -16,11 +16,8 @@ export type OptimizedCardImage = {
 
 const KB = 1024;
 
-/** Gallery / Upload: 75–100 KB. Camera: 50–100 KB. */
-function targetRange(source: CardImageSource): { min: number; max: number } {
-  if (source === "Camera") {
-    return { min: 50 * KB, max: 100 * KB };
-  }
+/** Gallery / Upload / Camera: share the same 75–100 KB OCR-friendly target. */
+function targetRange(_source: CardImageSource): { min: number; max: number } {
   return { min: 75 * KB, max: 100 * KB };
 }
 
@@ -41,10 +38,34 @@ function estimateDataUrlBytes(dataUrl: string): number {
 
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Could not decode image for optimization."));
-    img.src = dataUrl;
+    const finishWithBitmap = async () => {
+      try {
+        const response = await fetch(dataUrl);
+        const blob = await response.blob();
+        // Honor EXIF orientation so folder uploads match upright camera captures.
+        const bitmap = await createImageBitmap(blob, {
+          imageOrientation: "from-image",
+        } as ImageBitmapOptions);
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("no-2d");
+        ctx.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        const oriented = canvas.toDataURL("image/jpeg", 0.97);
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Could not decode oriented image."));
+        img.src = oriented;
+      } catch {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Could not decode image for optimization."));
+        img.src = dataUrl;
+      }
+    };
+    void finishWithBitmap();
   });
 }
 

@@ -8,7 +8,7 @@ const OPTIONS = [
   {
     to: "/signup/super-admin" as const,
     title: "Super Admin",
-    desc: "Create a company workspace on Freemium (20 MB).",
+    desc: "Create a company workspace on Freemium (1 MB, ~10 Cards).",
     icon: Building2,
   },
   {

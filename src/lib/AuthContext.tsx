@@ -10,6 +10,7 @@ import {
 } from "react";
 import { getAuthApiBase } from "@/lib/authConfig";
 import { registerAuthSessionBridge } from "@/lib/authSession";
+import { clearFreemiumWelcomeSession } from "@/lib/freemiumWelcome";
 import { recordLastSyncTime } from "@/lib/syncStatus";
 
 /* ------------------------------------------------------------------ */
@@ -278,6 +279,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (identifier: string, password: string): Promise<LoginResponse> => {
     const result = await apiLogin(identifier, password);
     setAuth(result.user, result.access_token, result.refresh_token);
+    // Allow freemium/subscription welcome popup to show immediately after sign-in.
+    clearFreemiumWelcomeSession();
     // Drain any offline queue left from a previous session once auth is ready.
     if (typeof window !== "undefined" && navigator.onLine) {
       void import("@/lib/autoSync").then(({ maybeAutoSyncWhenOnline }) =>

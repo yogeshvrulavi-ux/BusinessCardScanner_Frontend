@@ -11,6 +11,66 @@ export type WipeResult = {
   scopedToUser?: boolean;
 };
 
+async function parseDetail(response: Response): Promise<string> {
+  try {
+    const body = await response.json();
+    if (typeof body?.detail === "string") return body.detail;
+    if (body?.detail?.message) return String(body.detail.message);
+  } catch {
+    /* ignore */
+  }
+  return `Request failed (${response.status})`;
+}
+
+/** Email confirmation after Delete My Data / Delete Organisation Data. */
+export async function notifyDataDeletion(kind: "local_queue" | "organisation"): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/api/profile/data-deletion-notice`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind }),
+  });
+  if (!response.ok) {
+    console.warn("Deletion confirmation email failed:", await parseDetail(response));
+  }
+}
+
+export async function sendMobileVerificationOtp(phone: string): Promise<{ message: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/api/profile/mobile-verify/send-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone: phone.trim() }),
+  });
+  if (!response.ok) throw new Error(await parseDetail(response));
+  return response.json();
+}
+
+export async function confirmMobileVerificationOtp(input: {
+  phone: string;
+  otp: string;
+}): Promise<{ message: string; phone?: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/api/profile/mobile-verify/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone: input.phone.trim(), otp: input.otp.trim() }),
+  });
+  if (!response.ok) throw new Error(await parseDetail(response));
+  return response.json();
+}
+
+const MOBILE_VERIFIED_PREFIX = "cs-mobile-verified:";
+
+export function isMobileNumberVerified(userId: string | null | undefined, phone: string): boolean {
+  if (typeof window === "undefined" || !userId || !phone.trim()) return false;
+  const digits = phone.replace(/\D/g, "");
+  return localStorage.getItem(`${MOBILE_VERIFIED_PREFIX}${userId}:${digits}`) === "1";
+}
+
+export function markMobileNumberVerified(userId: string, phone: string): void {
+  if (typeof window === "undefined" || !userId) return;
+  const digits = phone.replace(/\D/g, "");
+  localStorage.setItem(`${MOBILE_VERIFIED_PREFIX}${userId}:${digits}`, "1");
+}
+
 export async function wipeAllAppData(): Promise<WipeResult> {
   const appUser = await getCurrentAppUser();
   const result: WipeResult = { scopedToUser: Boolean(appUser) };

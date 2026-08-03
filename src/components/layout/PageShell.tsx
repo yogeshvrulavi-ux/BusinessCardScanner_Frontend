@@ -3,11 +3,14 @@ import type { ReactNode } from "react";
 
 export function PageShell({
   title,
+  titleAside,
   description,
   actions,
   children,
 }: {
   title: string;
+  /** Optional control rendered next to the page title (e.g. hierarchy thumbnail). */
+  titleAside?: ReactNode;
   description?: string;
   actions?: ReactNode;
   children: ReactNode;
@@ -21,7 +24,10 @@ export function PageShell({
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl md:text-3xl">{title}</h1>
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl md:text-3xl">{title}</h1>
+            {titleAside}
+          </div>
           {description && (
             <p className="max-w-xl text-xs text-muted-foreground sm:text-sm">{description}</p>
           )}

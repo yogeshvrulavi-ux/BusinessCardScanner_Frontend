@@ -8,7 +8,9 @@ const URL_REGEX =
 const PHONE_PATTERN =
   /(?:(?:\+|00)\d{1,3}[\s\-.]?)?(?:\(?\d{2,4}\)?[\s\-.]?)?\d{3,4}[\s\-.]?\d{3,4}(?:[\s\-.]?\d{2,4})?/;
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
-const INDIAN_MOBILE_REGEX = /\b(?:\+91[\s-]?)?[6-9]\d{9}\b/g;
+/** Allow optional spaces/hyphens between digits so "98765 43210" still matches fully. */
+const INDIAN_MOBILE_REGEX =
+  /\b(?:\+91[\s-]?)?[6-9](?:[\s-]?\d){9}\b/g;
 const SOCIAL_REGEX =
   /\b(?:linkedin\.com|twitter\.com|facebook\.com|instagram\.com|x\.com|tiktok\.com|behance\.net|dribbble\.com)\S*/gi;
 const COMPANY_SUFFIX_REGEX =
@@ -67,7 +69,13 @@ function sanitizeEmail(value: string): string {
 }
 
 function sanitizePhone(value: string): string {
-  return value.replace(/^[|&;:)\]\[({"'\\<>~`^*|]+|[|&;:)\]\[({"'\\<>~`^*|]+$/g, "").trim();
+  const cleaned = value.replace(/^[|&;:)\]\[({"'\\<>~`^*|]+|[|&;:)\]\[({"'\\<>~`^*|]+$/g, "").trim();
+  if (!cleaned) return "";
+  // Drop formatting spaces — keep digits (and a leading + for country code).
+  const hasPlus = cleaned.startsWith("+") || cleaned.startsWith("00");
+  const digits = cleaned.replace(/\D/g, "");
+  if (!digits) return "";
+  return hasPlus ? `+${digits}` : digits;
 }
 
 function sanitizeUrl(value: string): string {
@@ -166,12 +174,25 @@ const extractGlobalMatches = (text: string, regex: RegExp): string[] => {
   return uniqueItems([...text.matchAll(matcher)].map((match) => match[0].trim()));
 };
 
-const normalizePhone = (value: string): string => value.replace(/\s+/g, " ").trim();
+const normalizePhone = (value: string): string => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "";
+  // Ignore all spaces/formatting; preserve digits and optional leading +.
+  const hasPlus = trimmed.startsWith("+") || /^\(\+/.test(trimmed) || trimmed.startsWith("00");
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return "";
+  return hasPlus ? `+${digits}` : digits;
+};
+
+/** Remove spaces between digits so spaced OCR phones match as a full number. */
+const collapseDigitSpaces = (text: string): string =>
+  text.replace(/(\d)[\s.]+(?=\d)/g, "$1");
 
 const extractPhones = (text: string, lines: string[]) => {
+  const phoneText = collapseDigitSpaces(text);
   const phones = uniqueItems([
-    ...extractGlobalMatches(text, INDIAN_MOBILE_REGEX),
-    ...extractGlobalMatches(text, PHONE_PATTERN),
+    ...extractGlobalMatches(phoneText, INDIAN_MOBILE_REGEX),
+    ...extractGlobalMatches(phoneText, PHONE_PATTERN),
   ])
     .map(normalizePhone)
     .filter((candidate) => {
@@ -193,9 +214,14 @@ const extractPhones = (text: string, lines: string[]) => {
     ) {
       return !isGarbageLine(line);
     }
-    let stripped = line;
+    let stripped = collapseDigitSpaces(line);
     for (const phone of phones) {
-      stripped = stripped.replace(phone, "").replace(/\d{7,}/g, "").trim();
+      const phoneDigits = phone.replace(/\D/g, "");
+      stripped = stripped.replace(phone, "");
+      if (phoneDigits) {
+        stripped = stripped.replace(phoneDigits, "");
+      }
+      stripped = stripped.replace(/\d{7,}/g, "").trim();
     }
     return stripped.length > 2 && !isGarbageLine(stripped);
   });

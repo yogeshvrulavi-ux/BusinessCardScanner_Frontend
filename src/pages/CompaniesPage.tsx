@@ -7,10 +7,18 @@ import {
   Trash2,
   User as UserIcon,
   Users,
+  ZoomIn,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { PageShell } from "@/components/layout/PageShell";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { InviteUserModal } from "@/components/admin/InviteUserModal";
@@ -35,6 +43,52 @@ import {
   TablePagination,
   clampPageAfterDelete,
 } from "@/components/ui/table-pagination";
+
+const TEAM_HIERARCHY_IMAGE = "/images/team-hierarchy.png";
+
+/** Tiny hierarchy preview beside the page title; click to maximize. */
+function TeamHierarchyThumb() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="View team hierarchy"
+        className="group relative h-8 w-11 shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted/30 shadow-soft transition hover:ring-2 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-9 sm:w-12"
+      >
+        <img
+          src={TEAM_HIERARCHY_IMAGE}
+          alt="Team hierarchy"
+          className="h-full w-full object-cover object-top"
+          loading="lazy"
+        />
+        <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition group-hover:bg-black/25">
+          <ZoomIn className="h-3 w-3 text-white opacity-0 drop-shadow transition group-hover:opacity-100" />
+        </span>
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Team Hierarchy</DialogTitle>
+            <DialogDescription>
+              View and understand roles &amp; permissions in your organization.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-hidden rounded-lg border border-border/50 bg-muted/20">
+            <img
+              src={TEAM_HIERARCHY_IMAGE}
+              alt="Team hierarchy diagram showing Super Admin, Admin, and User roles"
+              className="h-auto w-full object-contain"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 export function CompaniesPage() {
   return (
@@ -180,7 +234,8 @@ function CompaniesPageInner() {
       />
 
       <PageShell
-        title="Employee Management"
+        title="Manage Team"
+        titleAside={<TeamHierarchyThumb />}
         description={
           total > 0
             ? `${total} employee${total === 1 ? "" : "s"}`

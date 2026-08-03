@@ -4,7 +4,7 @@ import { CompaniesPage } from "@/pages/CompaniesPage";
 export const Route = createFileRoute("/companies")({
   head: () => ({
     meta: [
-      { title: "Employee Management · NameCardScan" },
+      { title: "Manage Team · NameCardScan" },
       {
         name: "description",
         content: "Invite and manage company Admins.",

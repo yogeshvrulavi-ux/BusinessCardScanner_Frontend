@@ -78,22 +78,18 @@ const collapseSpaces = (value: string): string => value.replace(/\s+/g, " ").tri
 const stripAllSpaces = (value: string): string => value.replace(/\s+/g, "");
 
 /**
- * Normalize a phone number for intermediate OCR handling: keep an optional
- * leading +country-code separated by one space, drop other OCR spacing.
+ * Normalize a phone number for intermediate OCR handling: ignore all spaces,
+ * keep digits only (optional leading + for country code).
+ * "98765 43210" → "9876543210", "+91 98765 43210" → "+919876543210".
  * Final form fields strip the dial code via splitPhoneNumber.
- * "+65 8322 9474" -> "+65 83229474", "8322 9 474" -> "83229474".
  */
 const normalizePhoneValue = (value: string): string => {
-  const trimmed = collapseSpaces(value);
+  const trimmed = (value || "").trim();
   if (!trimmed) return "";
+  const hasPlus = trimmed.startsWith("+") || trimmed.startsWith("00") || /^\(\+/.test(trimmed);
   const digits = trimmed.replace(/\D/g, "");
   if (!digits) return "";
-  const ccMatch = trimmed.match(/^\+(\d{1,3})(?=[\s\-.(])/);
-  if (ccMatch) {
-    const cc = ccMatch[1];
-    return `+${cc} ${digits.slice(cc.length)}`;
-  }
-  return trimmed.startsWith("+") ? `+${digits}` : digits;
+  return hasPlus ? `+${digits}` : digits;
 };
 
 /** Preserve line breaks and word spacing; only collapse duplicate spaces per line. */

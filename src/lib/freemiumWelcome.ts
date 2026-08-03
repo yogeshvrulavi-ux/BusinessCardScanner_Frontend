@@ -37,6 +37,12 @@ export function wasFreemiumWelcomeSeenThisSession(): boolean {
   return sessionStorage.getItem(SESSION_DISMISS_KEY) === "1";
 }
 
+/** Clear session dismiss so the freemium popup can show again after a fresh login. */
+export function clearFreemiumWelcomeSession(): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(SESSION_DISMISS_KEY);
+}
+
 /** Once per calendar day when crossing into 80%+ usage. */
 export function shouldShowEightyPercentReminder(): boolean {
   if (typeof window === "undefined") return false;

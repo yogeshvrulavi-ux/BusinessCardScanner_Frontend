@@ -1,4 +1,4 @@
-import { Check, Crown, Mail, Sparkles } from "lucide-react";
+import { Check, Crown, Mail, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,11 @@ import {
   annualSavingsPercent,
   ENTERPRISE_SALES_EMAIL,
   formatPlanPrice,
+  formatStorageWithCardEstimate,
   SUBSCRIPTION_PLANS,
   type BillingCycle,
   type PlanId,
+  type SubscriptionPlan,
 } from "@/lib/subscriptionPlans";
 import { cn } from "@/lib/utils";
 
@@ -21,35 +23,44 @@ type PlanPricingCardsProps = {
 export function PlanPricingCards({ cycle, currentPlanId }: PlanPricingCardsProps) {
   const current = String(currentPlanId || "FREEMIUM").toUpperCase();
 
-  const onSelect = (planId: PlanId, name: string, contactSales?: boolean) => {
-    if (contactSales) {
+  const onSelect = (plan: SubscriptionPlan) => {
+    if (plan.contactSales) {
       window.location.href = `mailto:${ENTERPRISE_SALES_EMAIL}?subject=${encodeURIComponent("Enterprise plan inquiry")}`;
       return;
     }
-    if (planId === current) {
-      toast.info(`You are already on the ${name} plan.`);
+    if (plan.id === current) {
+      toast.info(`You are already on the ${plan.name} plan.`);
       return;
     }
-    if (planId === "FREEMIUM") {
+    if (plan.id === "FREEMIUM") {
       toast.info("Freemium is your starting plan. Choose a paid tier to upgrade.");
       return;
     }
-    toast.success(`${name} selected`, {
+    if (plan.id === "RENEWER") {
+      toast.success("Renewer Pack selected", {
+        description:
+          "This pack retains your existing contacts and organisation data until you renew a full plan.",
+      });
+      return;
+    }
+    toast.success(`${plan.name} selected`, {
       description:
         "Upgrade requests are recorded. Your administrator will confirm billing to activate the new storage limit.",
     });
   };
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-6">
       {SUBSCRIPTION_PLANS.map((plan) => {
         const isCurrent = plan.id === current || (current === "PROFESSIONAL" && plan.id === "GROWTH");
         const price = formatPlanPrice(
           cycle === "monthly" ? plan.monthlyPrice : plan.annualPrice,
           cycle,
-          { contactSales: plan.contactSales },
+          { contactSales: plan.contactSales, freeMonths: plan.freeMonths },
         );
         const savings = cycle === "annual" ? annualSavingsPercent(plan) : null;
+        const showStorage =
+          plan.id !== "RENEWER" && plan.storageLabel !== "Retained" && plan.storageBytes > 0;
 
         return (
           <Card
@@ -80,14 +91,28 @@ export function PlanPricingCards({ cycle, currentPlanId }: PlanPricingCardsProps
             </div>
 
             <h3 className="text-lg font-semibold tracking-tight">{plan.name}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Storage · {plan.storageLabel}</p>
-            <div className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">{price}</div>
+            {plan.tagline ? (
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{plan.tagline}</p>
+            ) : showStorage ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Storage · {formatStorageWithCardEstimate(plan.storageBytes, plan.storageLabel)}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">Data retention</p>
+            )}
+            <div className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
+              {plan.id === "RENEWER" ? "$1/month" : price}
+            </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
               {plan.contactSales
                 ? ENTERPRISE_SALES_EMAIL
-                : cycle === "monthly"
+                : plan.id === "RENEWER"
                   ? "Billed monthly"
-                  : "Billed annually"}
+                  : cycle === "monthly" && (plan.freeMonths ?? 0) > 0
+                    ? `$${plan.monthlyPrice}/month + ${plan.freeMonths} Months FREE`
+                    : cycle === "monthly"
+                      ? "Billed monthly"
+                      : "Billed annually"}
             </p>
 
             <ul className="mt-5 flex-1 space-y-2 text-sm">
@@ -95,6 +120,12 @@ export function PlanPricingCards({ cycle, currentPlanId }: PlanPricingCardsProps
                 <li key={feature} className="flex items-start gap-2">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                   <span className="text-muted-foreground">{feature}</span>
+                </li>
+              ))}
+              {(plan.unavailableFeatures || []).map((feature) => (
+                <li key={`no-${feature}`} className="flex items-start gap-2">
+                  <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                  <span className="text-muted-foreground/80">{feature}</span>
                 </li>
               ))}
             </ul>
@@ -108,7 +139,7 @@ export function PlanPricingCards({ cycle, currentPlanId }: PlanPricingCardsProps
                 )}
                 variant={isCurrent ? "outline" : plan.contactSales ? "outline" : "default"}
                 disabled={isCurrent}
-                onClick={() => onSelect(plan.id, plan.name, plan.contactSales)}
+                onClick={() => onSelect(plan)}
               >
                 {isCurrent ? (
                   "Current plan"
@@ -116,6 +147,11 @@ export function PlanPricingCards({ cycle, currentPlanId }: PlanPricingCardsProps
                   <>
                     <Mail className="mr-1.5 h-3.5 w-3.5" />
                     Contact Sales
+                  </>
+                ) : plan.id === "RENEWER" ? (
+                  <>
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    Select Renewer
                   </>
                 ) : (
                   <>
