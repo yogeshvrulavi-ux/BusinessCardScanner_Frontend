@@ -204,6 +204,29 @@ const extractPhones = (text: string, lines: string[]) => {
       return true;
     });
 
+  // Prefer numbers that already include a country-code prefix over bare locals.
+  const preferred: string[] = [];
+  const seenNorm = new Set<string>();
+  const ranked = [...phones].sort((a, b) => {
+    const aPlus = a.trim().startsWith("+") || a.trim().startsWith("00") ? 1 : 0;
+    const bPlus = b.trim().startsWith("+") || b.trim().startsWith("00") ? 1 : 0;
+    if (aPlus !== bPlus) return bPlus - aPlus;
+    return b.replace(/\D/g, "").length - a.replace(/\D/g, "").length;
+  });
+  for (const phone of ranked) {
+    const norm = phone.replace(/\D/g, "");
+    let duplicate = false;
+    for (const existing of seenNorm) {
+      if (norm.endsWith(existing) || existing.endsWith(norm)) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) continue;
+    seenNorm.add(norm);
+    preferred.push(phone);
+  }
+
   const remaining = lines.filter((line) => {
     // Keep address lines intact even if they contain digit sequences.
     if (
@@ -226,7 +249,7 @@ const extractPhones = (text: string, lines: string[]) => {
     return stripped.length > 2 && !isGarbageLine(stripped);
   });
 
-  return { phones, remaining };
+  return { phones: preferred, remaining };
 };
 
 const stripKnownValues = (lines: string[], values: string[]): string[] => {
@@ -504,11 +527,42 @@ const extractCompany = (lines: string[], emails: string[], websites: string[]) =
   const usable = lines.filter((line) => !isGarbageLine(line) && !isLogoFragment(line));
   const emailDomainRoot = emails[0]?.split("@")[1]?.split(".")[0]?.toLowerCase() || "";
 
-  for (const line of usable) {
+  const isCompanyFragment = (line: string): boolean => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.length > 45) return false;
+    if (isGarbageLine(trimmed) || isLogoFragment(trimmed)) return false;
+    if (EMAIL_PATTERN.test(trimmed) || URL_PATTERN.test(trimmed) || PHONE_PATTERN.test(trimmed)) {
+      return false;
+    }
+    if (DESIGNATION_KEYWORDS.test(trimmed)) return false;
+    if (ADDRESS_STREET_KEYWORDS.test(trimmed) || ADDRESS_PIN_CODE.test(trimmed)) return false;
+    if (INDIAN_REGIONS.has(trimmed.toLowerCase())) return false;
+    const words = trimmed.split(/\s+/).filter(Boolean);
+    return words.length >= 1 && words.length <= 5;
+  };
+
+  const mergeMultilineCompany = (anchorIndex: number): string => {
+    const parts = [usable[anchorIndex].trim()];
+    for (let i = anchorIndex - 1; i >= 0 && parts.length < 5; i -= 1) {
+      const candidate = usable[i].trim();
+      if (!isCompanyFragment(candidate)) break;
+      if (candidate.split(/\s+/).length > 4) break;
+      parts.unshift(candidate);
+    }
+    return parts.join(" ").replace(/\s+/g, " ").trim();
+  };
+
+  for (let index = 0; index < usable.length; index += 1) {
+    const line = usable[index];
     if (COMPANY_SUFFIX_REGEX.test(line) && !isLikelyNameLine(line)) {
-      return emailDomainRoot
-        ? completeCompanyFromEmailDomain(emailDomainRoot, line)
-        : line.trim();
+      // Extend forward so "Technologies" + "Private Limited" become one name.
+      let anchor = index;
+      for (let j = index + 1; j < usable.length && j - index < 4; j += 1) {
+        if (!isCompanyFragment(usable[j])) break;
+        anchor = j;
+      }
+      const merged = mergeMultilineCompany(anchor);
+      return emailDomainRoot ? completeCompanyFromEmailDomain(emailDomainRoot, merged) : merged;
     }
   }
 
@@ -518,10 +572,14 @@ const extractCompany = (lines: string[], emails: string[], websites: string[]) =
     const domainRoot = domainMatch[1].toLowerCase();
     if (GENERIC_EMAIL_DOMAINS.has(domainRoot)) continue;
     const fromDomain = companyFromDomain(domainRoot, usable);
-    if (fromDomain) return fromDomain;
+    if (fromDomain) {
+      const domainIndex = usable.findIndex((line) => line.toLowerCase().includes(domainRoot));
+      if (domainIndex >= 0) return mergeMultilineCompany(domainIndex);
+      return fromDomain;
+    }
   }
 
-  const uppercaseLine = usable.find(
+  const uppercaseIndex = usable.findIndex(
     (line) =>
       line.length >= 4 &&
       line.length <= 50 &&
@@ -529,11 +587,12 @@ const extractCompany = (lines: string[], emails: string[], websites: string[]) =
       !DESIGNATION_KEYWORDS.test(line) &&
       !isLikelyNameLine(line),
   );
-  if (uppercaseLine) return uppercaseLine;
+  if (uppercaseIndex >= 0) return mergeMultilineCompany(uppercaseIndex);
 
-  for (const line of usable) {
+  for (let index = 0; index < usable.length; index += 1) {
+    const line = usable[index];
     if (!isLikelyNameLine(line) && line.length >= 4 && line.length <= 50) {
-      return line.trim();
+      return mergeMultilineCompany(index);
     }
   }
 

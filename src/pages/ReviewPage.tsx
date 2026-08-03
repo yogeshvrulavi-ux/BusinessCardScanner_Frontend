@@ -47,6 +47,7 @@ import {
   updateContact,
   storageLabel,
 } from "@/lib/contactStorage";
+import { OfflineStorageFullError } from "@/lib/indexeddb";
 import { checkForDuplicates, type DuplicateMatch } from "@/lib/duplicateDetection";
 import { notifyOutreachAfterSync } from "@/lib/outreachFeedback";
 import { loadUserSettings } from "@/lib/settingsStorage";
@@ -239,6 +240,10 @@ export const ReviewPage = () => {
     onError: (message) => {
       if (message === "not-allowed") {
         error("Microphone permission denied. Allow mic access to dictate notes.");
+      } else if (message === "microphone-unavailable") {
+        error("No microphone found. Connect a mic or type your notes.");
+      } else if (message === "network") {
+        info("Speech service is offline. Check your connection or type your notes.");
       } else {
         info("Could not capture speech. Try again or type your notes.");
       }
@@ -698,6 +703,7 @@ export const ReviewPage = () => {
       return;
     }
 
+    try {
     if (storageUp) {
       let contactId = editingId;
 
@@ -774,6 +780,13 @@ export const ReviewPage = () => {
     info("Saved to browser queue. Will sync when storage is available.");
     clearScanSession();
     navigate({ to: "/queue" });
+    } catch (err) {
+      if (err instanceof OfflineStorageFullError) {
+        error(err.message);
+        return;
+      }
+      error(err instanceof Error ? err.message : "Failed to save contact.");
+    }
   };
 
   const executeSave = async (action: DuplicateAction = "new") => {

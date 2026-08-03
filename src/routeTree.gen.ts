@@ -20,6 +20,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as QueueRouteImport } from './routes/queue'
 import { Route as InvitationsRouteImport } from './routes/invitations'
 import { Route as EventsRouteImport } from './routes/events'
+import { Route as EventManagementRouteImport } from './routes/event-management'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContactsRouteImport } from './routes/contacts'
 import { Route as CompaniesRouteImport } from './routes/companies'
@@ -85,6 +86,11 @@ const EventsRoute = EventsRouteImport.update({
   path: '/events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EventManagementRoute = EventManagementRouteImport.update({
+  id: '/event-management',
+  path: '/event-management',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
   '/dashboard': typeof DashboardRoute
+  '/event-management': typeof EventManagementRoute
   '/events': typeof EventsRoute
   '/invitations': typeof InvitationsRoute
   '/queue': typeof QueueRoute
@@ -159,6 +166,7 @@ export interface FileRoutesByTo {
   '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
   '/dashboard': typeof DashboardRoute
+  '/event-management': typeof EventManagementRoute
   '/events': typeof EventsRoute
   '/invitations': typeof InvitationsRoute
   '/queue': typeof QueueRoute
@@ -182,6 +190,7 @@ export interface FileRoutesById {
   '/companies': typeof CompaniesRoute
   '/contacts': typeof ContactsRoute
   '/dashboard': typeof DashboardRoute
+  '/event-management': typeof EventManagementRoute
   '/events': typeof EventsRoute
   '/invitations': typeof InvitationsRoute
   '/queue': typeof QueueRoute
@@ -206,6 +215,7 @@ export interface FileRouteTypes {
     | '/companies'
     | '/contacts'
     | '/dashboard'
+    | '/event-management'
     | '/events'
     | '/invitations'
     | '/queue'
@@ -228,6 +238,7 @@ export interface FileRouteTypes {
     | '/companies'
     | '/contacts'
     | '/dashboard'
+    | '/event-management'
     | '/events'
     | '/invitations'
     | '/queue'
@@ -250,6 +261,7 @@ export interface FileRouteTypes {
     | '/companies'
     | '/contacts'
     | '/dashboard'
+    | '/event-management'
     | '/events'
     | '/invitations'
     | '/queue'
@@ -273,6 +285,7 @@ export interface RootRouteChildren {
   CompaniesRoute: typeof CompaniesRoute
   ContactsRoute: typeof ContactsRoute
   DashboardRoute: typeof DashboardRoute
+  EventManagementRoute: typeof EventManagementRoute
   EventsRoute: typeof EventsRoute
   InvitationsRoute: typeof InvitationsRoute
   QueueRoute: typeof QueueRoute
@@ -366,6 +379,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/event-management': {
+      id: '/event-management'
+      path: '/event-management'
+      fullPath: '/event-management'
+      preLoaderRoute: typeof EventManagementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -453,6 +473,7 @@ const rootRouteChildren: RootRouteChildren = {
   CompaniesRoute: CompaniesRoute,
   ContactsRoute: ContactsRoute,
   DashboardRoute: DashboardRoute,
+  EventManagementRoute: EventManagementRoute,
   EventsRoute: EventsRoute,
   InvitationsRoute: InvitationsRoute,
   QueueRoute: QueueRoute,

@@ -15,6 +15,7 @@ import {
   Shield,
   ShieldCheck,
   Trash2,
+  UserX,
   Wifi,
 } from "lucide-react";
 import {
@@ -26,6 +27,8 @@ import {
   sendMobileVerificationOtp,
   wipeAllAppData,
 } from "@/lib/wipeAllData";
+import { clearUserBrowserData } from "@/lib/indexeddb";
+import { deleteOwnAccount } from "@/lib/adminApi";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +50,7 @@ import { useConfirmModal } from "@/components/ui/confirm-modal";
 import { hasCookieConsent, saveCookieConsent } from "@/lib/cookieConsent";
 import { useStorageQuota } from "@/contexts/StorageQuotaContext";
 import { isFreemiumExpired } from "@/lib/subscriptionPlans";
+import { getCurrentAppUser } from "@/lib/currentAppUser";
 import {
   applyWorkModePreference,
   DEFAULT_USER_SETTINGS,
@@ -96,13 +100,14 @@ function SettingRow({
 export function SettingsPage() {
   const navigate = useNavigate();
   const { confirm } = useConfirmModal();
-  const { user: authUser, refetchProfile, hasRole } = useAuth();
+  const { user: authUser, refetchProfile, hasRole, logout } = useAuth();
   const { quota } = useStorageQuota();
   const showGoogleDrive = hasRole("ADMIN", "SUPER_ADMIN");
   const [profile, setProfile] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [isSaving, setIsSaving] = useState(false);
   const [isWiping, setIsWiping] = useState(false);
   const [isClearingQueue, setIsClearingQueue] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [cookiesOpen, setCookiesOpen] = useState(false);
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -296,6 +301,34 @@ export function SettingsPage() {
       toast.error(err instanceof Error ? err.message : "Could not verify code.");
     } finally {
       setIsConfirmingOtp(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const ok = await confirm({
+      title: "Delete your account?",
+      description:
+        "This permanently deactivates your account and signs you out. You will need a new invitation to return.",
+      confirmLabel: "Delete account",
+      destructive: true,
+    });
+    if (!ok) return;
+    setIsDeletingAccount(true);
+    try {
+      await deleteOwnAccount();
+      try {
+        const appUser = await getCurrentAppUser();
+        await clearUserBrowserData(appUser);
+      } catch {
+        /* best-effort local cleanup */
+      }
+      await logout();
+      toast.success("Account deleted.");
+      void navigate({ to: "/auth/$pathname", params: { pathname: "sign-in" }, replace: true });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete account.");
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -571,42 +604,72 @@ export function SettingsPage() {
         </Card>
 
         <Card className="rounded-2xl border-destructive/20 bg-destructive/5 p-6 shadow-soft lg:col-span-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 text-sm font-medium text-destructive">
-                <Trash2 className="h-4 w-4" />
-                Danger zone
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                  <Trash2 className="h-4 w-4" />
+                  Danger zone
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Irreversible actions affecting data on this device.
+                </div>
+                <p className="mt-2 max-w-md text-[11px] text-muted-foreground">
+                  Delete My Data removes all locally stored scans from your offline queue.
+                </p>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                Irreversible actions affecting data on this device.
+              <div className="mt-4 flex w-full flex-col gap-2 sm:mt-0 sm:w-auto sm:flex-row">
+                <Button
+                  variant="outline"
+                  className="w-full rounded-md sm:w-auto"
+                  onClick={() => void handleDeleteMyData()}
+                  disabled={isClearingQueue || isWiping || isDeletingAccount}
+                >
+                  {isClearingQueue ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
+                  Delete My Data
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="w-full rounded-md sm:w-auto"
+                  onClick={() => void handleDeleteOrganisationData()}
+                  disabled={isWiping || isClearingQueue || isDeletingAccount}
+                >
+                  {isWiping ? (
+                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-1.5 h-3 w-3" />
+                  )}
+                  Delete Organisation Data
+                </Button>
               </div>
-              <p className="mt-2 max-w-md text-[11px] text-muted-foreground">
-                Delete My Data removes all locally stored scans from your offline queue.
-              </p>
             </div>
-            <div className="mt-4 flex w-full flex-col gap-2 sm:mt-0 sm:w-auto sm:flex-row">
-              <Button
-                variant="outline"
-                className="w-full rounded-md sm:w-auto"
-                onClick={() => void handleDeleteMyData()}
-                disabled={isClearingQueue || isWiping}
-              >
-                {isClearingQueue ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
-                Delete My Data
-              </Button>
-              <Button
-                variant="destructive"
-                className="w-full rounded-md sm:w-auto"
-                onClick={() => void handleDeleteOrganisationData()}
-                disabled={isWiping || isClearingQueue}
-              >
-                {isWiping ? (
-                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                ) : (
-                  <Trash2 className="mr-1.5 h-3 w-3" />
-                )}
-                Delete Organisation Data
-              </Button>
+
+            <div className="border-t border-destructive/20 pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                    <UserX className="h-4 w-4" />
+                    Delete Account
+                  </div>
+                  <p className="mt-1 max-w-xl text-xs text-muted-foreground">
+                    Permanently deactivate your NameCardScan account, revoke all sessions, and sign
+                    you out. This cannot be undone from the app.
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  className="w-full rounded-md sm:w-auto"
+                  onClick={() => void handleDeleteAccount()}
+                  disabled={isDeletingAccount || isWiping || isClearingQueue}
+                >
+                  {isDeletingAccount ? (
+                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                  ) : (
+                    <UserX className="mr-1.5 h-3 w-3" />
+                  )}
+                  Delete Account
+                </Button>
+              </div>
             </div>
           </div>
         </Card>

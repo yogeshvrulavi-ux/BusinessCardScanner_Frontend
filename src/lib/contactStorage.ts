@@ -11,6 +11,7 @@ import {
   getQueueItems,
   getStoredContactById,
   listStoredContacts,
+  OfflineStorageFullError,
   patchStoredContactSyncStatus,
   removeQueueItem,
   saveStoredContact,
@@ -127,7 +128,17 @@ async function saveOfflineToIndexedDbQueue(
     errorMessage,
     appUser,
   );
-  await addToQueue(item);
+  try {
+    await addToQueue(item);
+  } catch (err) {
+    if (err instanceof OfflineStorageFullError) {
+      throw err;
+    }
+    if (err instanceof Error && /quota|storage full/i.test(err.message)) {
+      throw new OfflineStorageFullError();
+    }
+    throw err;
+  }
   const { recordOfflineQueueCapture } = await import("@/lib/captureSourceAnalytics");
   recordOfflineQueueCapture();
   notifyContactsListChanged();
@@ -168,9 +179,20 @@ async function saveOnlineToPostgres(
       id: result.id || crypto.randomUUID(),
     };
   } catch (err) {
+    if (err instanceof OfflineStorageFullError) {
+      throw err;
+    }
     const message = err instanceof Error ? err.message : "Save failed";
-    const fallback = await saveOfflineToIndexedDbQueue(body, cardImageBase64, message);
-    return { ...fallback, error: message };
+    if (/quota|storage full/i.test(message)) {
+      throw new OfflineStorageFullError();
+    }
+    try {
+      const fallback = await saveOfflineToIndexedDbQueue(body, cardImageBase64, message);
+      return { ...fallback, error: message };
+    } catch (queueErr) {
+      if (queueErr instanceof OfflineStorageFullError) throw queueErr;
+      throw err instanceof Error ? err : new Error(message);
+    }
   }
 }
 
@@ -340,11 +362,19 @@ export async function saveContact(
   await resolveStorageMode();
   const mode = options?.connectionMode ?? saveConnectionMode();
 
-  if (isOfflineSave({ ...options, connectionMode: mode })) {
-    return saveOfflineToIndexedDbQueue(payload, cardImageBase64);
-  }
+  try {
+    if (isOfflineSave({ ...options, connectionMode: mode })) {
+      return await saveOfflineToIndexedDbQueue(payload, cardImageBase64);
+    }
 
-  return saveOnlineToPostgres(payload, cardImageBase64, options);
+    return await saveOnlineToPostgres(payload, cardImageBase64, options);
+  } catch (err) {
+    if (err instanceof OfflineStorageFullError) {
+      console.error("[contactStorage] Offline storage full", err);
+      throw err;
+    }
+    throw err;
+  }
 }
 
 export async function updateContact(

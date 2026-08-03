@@ -313,3 +313,72 @@ export async function acceptInvitation(data: {
     };
   }>;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Managed events (Super Admin)                                       */
+/* ------------------------------------------------------------------ */
+
+export type ManagedEvent = {
+  id: string;
+  name: string;
+  description: string;
+  location: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateManagedEventData = {
+  name: string;
+  description?: string;
+  location?: string;
+  start_date?: string;
+  end_date?: string;
+  status?: "active" | "inactive" | "completed";
+};
+
+export type UpdateManagedEventData = Partial<CreateManagedEventData>;
+
+export async function fetchManagedEvents(page = 1, limit = 50, q = "") {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
+  if (q.trim()) params.set("q", q.trim());
+  return apiJson<PaginatedResponse<ManagedEvent>>(`/api/events?${params.toString()}`);
+}
+
+export async function fetchManagedEvent(id: string) {
+  return apiJson<ManagedEvent>(`/api/events/${id}`);
+}
+
+export async function createManagedEvent(data: CreateManagedEventData) {
+  return apiJson<ManagedEvent>("/api/events", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateManagedEvent(id: string, data: UpdateManagedEventData) {
+  return apiJson<ManagedEvent>(`/api/events/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteManagedEvent(id: string) {
+  return apiJson<{ success: boolean; message: string; id: string }>(`/api/events/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function deleteOwnAccount() {
+  return apiJson<{ success: boolean; message: string }>("/api/profile/account", {
+    method: "DELETE",
+    body: JSON.stringify({ confirm: true }),
+  });
+}

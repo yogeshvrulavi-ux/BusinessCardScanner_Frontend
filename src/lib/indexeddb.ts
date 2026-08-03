@@ -22,9 +22,65 @@ const STORE_NAME = "sync_queue";
 const CONTACTS_CACHE_STORE = "contacts_cache";
 const DB_VERSION = 3;
 
+export const OFFLINE_STORAGE_FULL_MESSAGE =
+  "Offline storage is full. Please sync pending data or free up device storage.";
+
+export class OfflineStorageFullError extends Error {
+  constructor(message = OFFLINE_STORAGE_FULL_MESSAGE) {
+    super(message);
+    this.name = "OfflineStorageFullError";
+  }
+}
+
+export function isQuotaExceededError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const anyErr = err as { name?: string; code?: number; message?: string };
+  if (anyErr.name === "QuotaExceededError" || anyErr.name === "NS_ERROR_DOM_QUOTA_REACHED") {
+    return true;
+  }
+  if (anyErr.code === 22 || anyErr.code === 1014) return true;
+  const message = String(anyErr.message || "").toLowerCase();
+  return message.includes("quota") || message.includes("storage full");
+}
+
 function dispatchQueueUpdate() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("cs-queue-updated"));
+  }
+}
+
+function rethrowStorageWriteError(err: unknown, operation: string): never {
+  if (isQuotaExceededError(err)) {
+    console.error(`[offline-storage] Quota exceeded during ${operation}`, err);
+    throw new OfflineStorageFullError();
+  }
+  console.error(`[offline-storage] Failed during ${operation}`, err);
+  throw err instanceof Error ? err : new Error(String(err));
+}
+
+/** Best-effort check before large writes. Returns false when clearly full. */
+export async function ensureOfflineStorageAvailable(estimatedBytes = 0): Promise<void> {
+  if (typeof navigator === "undefined" || !navigator.storage?.estimate) return;
+  try {
+    const estimate = await navigator.storage.estimate();
+    const usage = estimate.usage ?? 0;
+    const quota = estimate.quota ?? 0;
+    if (!quota) return;
+    const remaining = quota - usage;
+    // Leave a small safety buffer; block when remaining room is tiny.
+    const needed = Math.max(estimatedBytes, 64 * 1024);
+    if (remaining < needed) {
+      console.error("[offline-storage] Insufficient browser storage", {
+        usage,
+        quota,
+        remaining,
+        needed,
+      });
+      throw new OfflineStorageFullError();
+    }
+  } catch (err) {
+    if (err instanceof OfflineStorageFullError) throw err;
+    // estimate() failures should not block saves
   }
 }
 
@@ -42,9 +98,16 @@ export async function initDB(): Promise<IDBPDatabase> {
 }
 
 export async function addToQueue(item: QueueItem): Promise<void> {
-  const db = await initDB();
-  await db.put(STORE_NAME, item);
-  dispatchQueueUpdate();
+  const estimated =
+    (item.image_base64?.length || 0) + JSON.stringify(item.contact_data || {}).length;
+  await ensureOfflineStorageAvailable(estimated);
+  try {
+    const db = await initDB();
+    await db.put(STORE_NAME, item);
+    dispatchQueueUpdate();
+  } catch (err) {
+    rethrowStorageWriteError(err, "addToQueue");
+  }
 }
 
 export async function getQueueItems(): Promise<QueueItem[]> {
@@ -53,9 +116,13 @@ export async function getQueueItems(): Promise<QueueItem[]> {
 }
 
 export async function updateQueueItem(item: QueueItem): Promise<void> {
-  const db = await initDB();
-  await db.put(STORE_NAME, item);
-  dispatchQueueUpdate();
+  try {
+    const db = await initDB();
+    await db.put(STORE_NAME, item);
+    dispatchQueueUpdate();
+  } catch (err) {
+    rethrowStorageWriteError(err, "updateQueueItem");
+  }
 }
 
 export async function removeQueueItem(id: string): Promise<void> {
@@ -74,7 +141,11 @@ export async function cacheContacts(contacts: any[]): Promise<void> {
       await store.put(contact);
     }
     await tx.done;
-  } catch {
+  } catch (err) {
+    if (isQuotaExceededError(err)) {
+      console.error("[offline-storage] Quota exceeded during cacheContacts", err);
+      return;
+    }
     /* cache is best-effort */
   }
 }
@@ -208,28 +279,42 @@ export async function saveStoredContact(
   cardImageBase64?: string,
 ): Promise<{ id: string }> {
   const record = contactRecordFromPayload(payload, undefined, cardImageBase64);
-  const db = await initDB();
-  await db.put(CONTACTS_CACHE_STORE, record);
-  window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
-  return { id: String(record.id) };
+  const estimated =
+    JSON.stringify(record).length + (typeof cardImageBase64 === "string" ? cardImageBase64.length : 0);
+  await ensureOfflineStorageAvailable(estimated);
+  try {
+    const db = await initDB();
+    await db.put(CONTACTS_CACHE_STORE, record);
+    window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
+    return { id: String(record.id) };
+  } catch (err) {
+    rethrowStorageWriteError(err, "saveStoredContact");
+  }
 }
 
 export async function updateStoredContact(
   contactId: string,
   payload: Record<string, unknown>,
 ): Promise<void> {
-  const db = await initDB();
-  const existing = (await db.get(CONTACTS_CACHE_STORE, contactId)) as Record<string, unknown> | undefined;
-  const record = contactRecordFromPayload(
-    { ...(existing || {}), ...payload },
-    contactId,
-    payload.cardImageBase64 as string | undefined,
-  );
-  if (existing?.created_at) {
-    record.created_at = existing.created_at;
+  try {
+    const db = await initDB();
+    const existing = (await db.get(CONTACTS_CACHE_STORE, contactId)) as
+      | Record<string, unknown>
+      | undefined;
+    const record = contactRecordFromPayload(
+      { ...(existing || {}), ...payload },
+      contactId,
+      payload.cardImageBase64 as string | undefined,
+    );
+    if (existing?.created_at) {
+      record.created_at = existing.created_at;
+    }
+    await ensureOfflineStorageAvailable(JSON.stringify(record).length);
+    await db.put(CONTACTS_CACHE_STORE, record);
+    window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
+  } catch (err) {
+    rethrowStorageWriteError(err, "updateStoredContact");
   }
-  await db.put(CONTACTS_CACHE_STORE, record);
-  window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
 }
 
 export async function listStoredContacts(): Promise<Record<string, unknown>[]> {

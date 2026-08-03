@@ -3,6 +3,7 @@ import {
   Contact,
   ScanLine,
   FolderKanban,
+  CalendarDays,
   Inbox,
   ScrollText,
   Settings,
@@ -33,6 +34,12 @@ export const sidebarItems: SidebarItem[] = [
     title: "Manage Team",
     url: "/companies",
     icon: Users,
+    roles: ["SUPER_ADMIN"],
+  },
+  {
+    title: "Event Management",
+    url: "/event-management",
+    icon: CalendarDays,
     roles: ["SUPER_ADMIN"],
   },
   {
